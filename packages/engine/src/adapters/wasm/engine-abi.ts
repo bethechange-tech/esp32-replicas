@@ -9,6 +9,7 @@ export class LoadKind {
   static readonly PARTITION_TABLE = 2;
   static readonly APP = 3;
   static readonly WHOLE_FLASH = 5;
+  static readonly SCRIPT = 6;
 
   private constructor() {}
 }
@@ -92,6 +93,33 @@ export class EngineAbi {
     return this.withBytes({
       bytes: args.bytes,
       use: (pointer) => this.module.call({ name: "esp32sim_board_uart_input", values: [args.emulator, args.pin, args.baud, pointer, args.bytes.length] }),
+    });
+  }
+
+  wifi(args: { emulator: number; spec: string }): number {
+    const bytes = new TextEncoder().encode(args.spec);
+    return this.withBytes({ bytes, use: (pointer) => this.module.call({ name: "esp32sim_wifi", values: [args.emulator, pointer, bytes.length] }) });
+  }
+
+  netmon(emulator: number): number {
+    return this.module.call({ name: "esp32sim_netmon", values: [emulator] });
+  }
+
+  natRelay(args: { emulator: number; flags: number }): number {
+    return this.module.call({ name: "esp32sim_nat_relay", values: [args.emulator, args.flags] });
+  }
+
+  /** The records the guest's sockets queued since the last take. */
+  natTake(emulator: number): Uint8Array {
+    const length = this.module.call({ name: "esp32sim_nat_take", values: [emulator] });
+    if (length === 0) return new Uint8Array(0);
+    return this.module.read({ pointer: this.module.call({ name: "esp32sim_nat_ptr", values: [emulator] }), length });
+  }
+
+  natEvent(args: { emulator: number; kind: number; id: number; arg: number; bytes: Uint8Array }): number {
+    return this.withBytes({
+      bytes: args.bytes,
+      use: (pointer) => this.module.call({ name: "esp32sim_nat_event", values: [args.emulator, args.kind, args.id, args.arg, pointer, args.bytes.length] }),
     });
   }
 

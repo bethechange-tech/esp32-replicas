@@ -2,8 +2,11 @@ import type { GpioEdge, I2cOperation, LcdFrame, SpiTransaction, UartByte } from 
 
 export interface I2cDevice {
   readonly address: number;
+  /** A new transaction: a write starts at its first byte, a read continues from the register last pointed at. */
+  start(args: { read: boolean }): void;
   write(byte: number): boolean;
   read(): number;
+  stop(): void;
 }
 
 export interface SpiDevice {

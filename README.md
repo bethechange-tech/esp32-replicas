@@ -50,7 +50,7 @@ them; CI always builds them.
 
 ## Bring your own image
 
-Once the engine lands you run your own `factory.bin` on a replica:
+You run your own `factory.bin` on a replica (the `small-screen` board so far); `--seconds` is the emulated time to run, default 20:
 
 ```
 pnpm replica run --board small-screen --image ./factory.bin --wifi ssid=lab,psk=secret \

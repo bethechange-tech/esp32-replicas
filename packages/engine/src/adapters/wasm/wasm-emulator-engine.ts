@@ -4,19 +4,26 @@ import {
   type EmulatorEngine,
   type EngineInput,
   type FlashImage,
+  type FlowAnswer,
+  type FlowRequest,
+  type GuestRadio,
+  type NetworkFrame,
   type Observation,
   type RomSource,
   type Slice,
+  type WifiSpec,
 } from "@replicas/core";
 import type { EngineAbi } from "./engine-abi";
 import { LoadKind } from "./engine-abi";
 import type { GuestModule } from "./guest-module";
 import type { HostBoardBridge } from "./host-board-bridge";
 import type { HostImports } from "./host-imports";
+import { NatRecords } from "./nat-records";
 import { Outbox, type ConsoleSource } from "./outbox";
 
 const HOST_BOARD_FOR_CHIP = { esp32s3: "host", esp32: "host-esp32" } as const;
 const MAX_CONSOLE_BYTES_PER_MESSAGE = 32_768;
+const RELAY_FLAGS = 0b111;
 const HEX_RADIX = 16;
 const HEX_DIGITS_PER_BYTE = 2;
 
@@ -32,12 +39,6 @@ export class EngineStopped extends Error {
   }
 }
 
-export class UnsupportedInput extends Error {
-  constructor(kind: string) {
-    super(`console, gpio and strap input are supported; ${kind} input is not yet`);
-  }
-}
-
 export interface WasmEmulatorEngineParts {
   /** The compiled module's bytes: `build/esp32sim.wasm`, from `tools/build-engine.sh`. */
   readonly wasm: Uint8Array;
@@ -50,10 +51,12 @@ export interface WasmEmulatorEngineParts {
 }
 
 /** Runs unchanged firmware images in the engine's module, through its host board. The one place the module is instantiated. */
-export class WasmEmulatorEngine implements EmulatorEngine {
+export class WasmEmulatorEngine implements EmulatorEngine, GuestRadio {
   private emulator: number | undefined;
   private chip: BoardDeclaration["chip"] | undefined;
   private pendingConsole = "";
+  private pendingFrames: NetworkFrame[] = [];
+  private readonly analogVolts = new Map<number, number>();
 
   constructor(private readonly parts: WasmEmulatorEngineParts) {}
 
@@ -80,6 +83,8 @@ export class WasmEmulatorEngine implements EmulatorEngine {
     this.emulator = undefined;
     this.chip = undefined;
     this.pendingConsole = "";
+    this.pendingFrames = [];
+    this.analogVolts.clear();
   }
 
   load(image: FlashImage): void {
@@ -116,7 +121,33 @@ export class WasmEmulatorEngine implements EmulatorEngine {
       this.parts.abi.inputText({ emulator, text: JSON.stringify({ t: "strap", v: `0x${input.value.toString(HEX_RADIX)}` }) });
       return;
     }
-    throw new UnsupportedInput(input.kind);
+    if (input.kind === "uart") {
+      this.requireOk({ code: this.parts.abi.uartInput({ emulator, pin: input.pin, baud: input.baud, bytes: input.bytes }), what: `UART input on GPIO${input.pin}` });
+      return;
+    }
+    this.setAnalog({ emulator, gpio: input.gpio, volts: input.volts });
+  }
+
+  attachWifi(spec: WifiSpec): void {
+    const emulator = this.created();
+    this.requireOk({ code: this.parts.abi.wifi({ emulator, spec: `ssid=${spec.ssid},psk=${spec.psk}` }), what: "the access point" });
+    this.requireOk({ code: this.parts.abi.natRelay({ emulator, flags: RELAY_FLAGS }), what: "the network relay" });
+    this.requireOk({ code: this.parts.abi.netmon(emulator), what: "the network monitor" });
+  }
+
+  takeFlowRequests(): readonly FlowRequest[] {
+    return NatRecords.parse(this.parts.abi.natTake(this.created()));
+  }
+
+  answer(answer: FlowAnswer): number {
+    return this.parts.abi.natEvent({ emulator: this.created(), ...NatRecords.encode(answer) });
+  }
+
+  takeNetworkFrames(): readonly NetworkFrame[] {
+    this.drain(this.created());
+    const frames = this.pendingFrames;
+    this.pendingFrames = [];
+    return frames;
   }
 
   takeOutput(): Observation {
@@ -149,6 +180,14 @@ export class WasmEmulatorEngine implements EmulatorEngine {
   private drain(emulator: number): void {
     const messages = this.parts.abi.takeOutbox(emulator);
     this.pendingConsole += Outbox.consoleText({ messages, source: this.parts.console });
+    this.pendingFrames.push(...Outbox.networkFrames(messages));
+  }
+
+  /** An analogue level is a script action; each call loads the whole table, so the guest always sees the latest voltages. */
+  private setAnalog(args: { emulator: number; gpio: number; volts: number }): void {
+    this.analogVolts.set(args.gpio, args.volts);
+    const script = Array.from(this.analogVolts, ([gpio, volts]) => `0 adc ${gpio} ${volts}`).join("\n");
+    this.requireOk({ code: this.parts.abi.load({ emulator: args.emulator, kind: LoadKind.SCRIPT, bytes: new TextEncoder().encode(script) }), what: "the analogue level" });
   }
 
   private created(): number {

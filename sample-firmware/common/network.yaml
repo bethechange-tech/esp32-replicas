@@ -1,0 +1,21 @@
+# Wi-Fi is set over the serial console (Improv), as on the real boards; nothing is configured here.
+wifi:
+  reboot_timeout: 0s
+
+improv_serial:
+
+time:
+  - platform: sntp
+    servers:
+      - 10.0.2.2
+
+mqtt:
+  id: broker_link
+  broker: broker.replica.test
+  port: 8883
+  discovery: false
+  reboot_timeout: 0s
+  topic_prefix: replica/${name}
+
+web_server:
+  port: 80

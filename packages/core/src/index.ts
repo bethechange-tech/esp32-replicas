@@ -9,3 +9,6 @@ export * from "./ports/firmware-source";
 export * from "./ports/clock";
 export * from "./ports/rom-source";
 export * from "./ports/board-facts-source";
+export * from "./ports/guest-radio";
+export * from "./board-facts-parser";
+export * from "./ports/output";

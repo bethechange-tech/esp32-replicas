@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
+    "@replicas/boards": "workspace:*",
     "@replicas/core": "workspace:*",
+    "@replicas/devices": "workspace:*",
     "@replicas/engine": "workspace:*",
     "@replicas/firmware": "workspace:*",
     "@replicas/network": "workspace:*",

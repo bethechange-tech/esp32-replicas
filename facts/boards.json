@@ -1,0 +1,153 @@
+{
+  "small-screen": {
+    "model": {
+      "value": "Waveshare ESP32-S3-LCD-1.69 V2",
+      "unit": "none",
+      "source": "https://www.waveshare.com/esp32-s3-lcd-1.69.htm"
+    },
+    "chip": {
+      "value": "esp32s3",
+      "unit": "none",
+      "source": "https://www.waveshare.com/esp32-s3-lcd-1.69.htm"
+    },
+    "flashBytes": {
+      "value": 16777216,
+      "unit": "byte",
+      "source": "https://www.waveshare.com/esp32-s3-lcd-1.69.htm"
+    },
+    "psramBytes": {
+      "value": 8388608,
+      "unit": "byte",
+      "source": "https://www.waveshare.com/esp32-s3-lcd-1.69.htm"
+    },
+    "pins": {
+      "display-clock": {
+        "value": 6,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-data": {
+        "value": 7,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-select": {
+        "value": 5,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-data-command": {
+        "value": 4,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-reset": {
+        "value": 8,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "backlight": {
+        "value": 15,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "boot-button": {
+        "value": 0,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "power-button": {
+        "value": 40,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "power-latch": {
+        "value": 41,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "i2c-data": {
+        "value": 11,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "i2c-clock": {
+        "value": 10,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "battery-sense": {
+        "value": 1,
+        "unit": "gpio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "line-receive": {
+        "value": 18,
+        "unit": "gpio",
+        "source": "https://esphome.io/components/uart/"
+      }
+    },
+    "numbers": {
+      "display-ram-columns": {
+        "value": 240,
+        "unit": "pixel",
+        "source": "https://esphome.io/components/display/mipi_spi/"
+      },
+      "display-ram-rows": {
+        "value": 320,
+        "unit": "pixel",
+        "source": "https://esphome.io/components/display/mipi_spi/"
+      },
+      "display-visible-columns": {
+        "value": 240,
+        "unit": "pixel",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-visible-rows": {
+        "value": 280,
+        "unit": "pixel",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-column-offset": {
+        "value": 0,
+        "unit": "pixel",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "display-row-offset": {
+        "value": 20,
+        "unit": "pixel",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "i2c-bus": {
+        "value": 0,
+        "unit": "none",
+        "source": "https://esphome.io/components/sensor/ina226/"
+      },
+      "current-monitor-address": {
+        "value": 64,
+        "unit": "i2c-address",
+        "source": "https://www.ti.com/lit/ds/symlink/ina226.pdf"
+      },
+      "battery-divider-ratio": {
+        "value": 3,
+        "unit": "ratio",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      },
+      "line-baud": {
+        "value": 115200,
+        "unit": "baud",
+        "source": "https://esphome.io/components/uart/"
+      },
+      "power-hold": {
+        "value": 3500,
+        "unit": "millisecond",
+        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
+      }
+    },
+    "flags": {},
+    "decisions": {
+      "display-mirror-x": true,
+      "display-mirror-y": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "esphome": {
+    "version": "2026.10.2",
+    "image": "esphome/esphome@sha256:c994a49a945094643b14c213bfd500a95ffed94cd68848772828192e126bd375"
+  },
+  "samples": {
+    "small-screen": {
+      "factorySha256": "c6fe4bec367e7770721c7fe1a06f94dfaf003911eb8acd64f56984925293e877",
+      "elfSha256": "d498b559d49deb7c2c1ec9e0ba29c8f628aff60c0e3bc95987cd1dd649f3de5d"
+    }
+  }
+}

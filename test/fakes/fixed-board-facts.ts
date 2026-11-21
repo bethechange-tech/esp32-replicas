@@ -13,6 +13,10 @@ export class FixedBoardFacts implements BoardFactsSource {
       chip: { value: this.args.chip, unit: "none", source: SOURCE },
       flashBytes: { value: this.args.flashBytes, unit: "byte", source: SOURCE },
       psramBytes: { value: 0, unit: "byte", source: SOURCE },
+      pins: {},
+      numbers: {},
+      flags: {},
+      decisions: {},
     };
   }
 }

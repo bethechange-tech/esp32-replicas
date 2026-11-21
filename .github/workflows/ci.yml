@@ -27,4 +27,5 @@ jobs:
       - run: pnpm fetch:roms
       - run: pnpm engine:build
       - run: pnpm engine:test
-      - run: pnpm test
+      - run: sh tools/build-samples.sh
+      - run: pnpm test:full

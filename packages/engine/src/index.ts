@@ -8,3 +8,4 @@ export * from "./adapters/wasm/jit-host";
 export * from "./adapters/wasm/engine-log";
 export * from "./adapters/wasm/outbox";
 export * from "./adapters/clock/wall-clock";
+export * from "./adapters/wasm/nat-records";

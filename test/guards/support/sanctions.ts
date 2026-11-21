@@ -11,10 +11,13 @@ export class Sanctions {
     { file: "packages/engine/src/adapters/wasm/guest-module.ts", name: "GuestModuleNotBound", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/engine/src/adapters/wasm/wasm-emulator-engine.ts", name: "EngineRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/engine/src/adapters/wasm/wasm-emulator-engine.ts", name: "EngineStopped", reason: "an exception is a value built where it is thrown, not a collaborator" },
-    { file: "packages/engine/src/adapters/wasm/wasm-emulator-engine.ts", name: "UnsupportedInput", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/engine/src/adapters/wasm/wasm-emulator-engine.ts", name: "EngineNotCreated", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/firmware/src/adapters/files/directory-rom-source.ts", name: "RomRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/firmware/src/flash-image-validator.ts", name: "FlashImageRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
+    { file: "packages/core/src/board-facts.ts", name: "UnknownFact", reason: "an exception is a value built where it is thrown, not a collaborator" },
+    { file: "packages/core/src/board-facts-parser.ts", name: "FactsRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
+    { file: "packages/cli/src/run-arguments.ts", name: "ArgumentsRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
+    { file: "packages/firmware/src/partition-table.ts", name: "PartitionNotFound", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/setup/src/improv-serial.ts", name: "ImprovRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
   ];
 

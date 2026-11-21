@@ -25,7 +25,9 @@ export type EngineInput =
   | { readonly kind: "gpio"; readonly gpio: number; readonly level: boolean }
   /** The boot-mode strapping pins the mask ROM samples at the next reset (GPIO_STRAP_REG); set before boot. */
   | { readonly kind: "strap"; readonly value: number }
-  | { readonly kind: "adc"; readonly gpio: number; readonly volts: number };
+  | { readonly kind: "adc"; readonly gpio: number; readonly volts: number }
+  /** Bytes a device sends the chip on a UART pin at a baud rate; the board must declare its UART routed to the host. */
+  | { readonly kind: "uart"; readonly pin: number; readonly baud: number; readonly bytes: Uint8Array };
 
 /** The refusal of every call that needs a created engine. */
 export class EngineNotCreated extends Error {

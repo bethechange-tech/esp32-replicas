@@ -1,0 +1,4 @@
+logger:
+  hardware_uart: UART0
+  baud_rate: 115200
+  level: INFO
