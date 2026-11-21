@@ -1,0 +1,15 @@
+[package]
+name = "xtensa-lx7"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Xtensa LX7 (ESP32-S3 configuration) instruction-level emulator core"
+
+[dependencies]
+emu-core = { path = "../emu-core" }
+
+[features]
+wasm-jit-tests = []
+wasm-jit-profile = []
+wasm-cpu-profile = []
+wasm-cache-inline = []

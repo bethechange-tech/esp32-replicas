@@ -1,0 +1,15 @@
+{
+  "name": "@replicas/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@replicas/core": "workspace:*",
+    "@replicas/engine": "workspace:*",
+    "@replicas/firmware": "workspace:*",
+    "@replicas/network": "workspace:*",
+    "@replicas/setup": "workspace:*"
+  }
+}

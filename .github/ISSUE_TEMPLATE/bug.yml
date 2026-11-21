@@ -1,0 +1,28 @@
+name: Bug report
+description: Something a replica does that the real board does not
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Requests for new boards or chips are out of scope: this project replicates four boards only.
+        Report security problems privately (see SECURITY.md), never here.
+  - type: dropdown
+    id: board
+    attributes:
+      label: Board
+      options: [small-screen, small-screen-touch, panel-7, headless]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what the real board does
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The command, and the sample firmware or a description of your image. Do not paste secrets or private host names.
+    validations:
+      required: true

@@ -1,0 +1,378 @@
+//! The C ABI the page drives, exercised natively: create, load, boot, run in slices, drain the
+//! outbox — for the S3 with a board and for the C3 and C6 — and check the messages of the web protocol
+//! (`docs/web-ui.md`) come out: `board`, `serial`, `stat`, a display frame, audio, the LED ring.
+//! Needs the mask ROM ELFs like the goldens.
+#[path = "../../tests/common.rs"]
+mod common;
+use esp32sim_wasm::*;
+
+struct Emu(*mut esp32sim_wasm::Emu);
+impl Emu {
+    fn new(board: &str, flash_mb: u32, psram_mb: u32) -> Emu {
+        // SAFETY: `board` is readable for the call and the returned pointer is checked for null.
+        let e = unsafe { esp32sim_new(board.as_ptr(), board.len(), flash_mb, psram_mb) };
+        assert!(!e.is_null(), "board {}", board); Emu(e)
+    }
+    fn load(&mut self, kind: u32, d: &[u8]) {
+        // SAFETY: `&mut self` provides exclusive access and `d` is readable for the call.
+        assert_eq!(unsafe { esp32sim_load(self.0, kind, d.as_ptr(), d.len()) }, 0, "load kind {}", kind);
+    }
+    fn load_file(&mut self, kind: u32, path: &str) { self.load(kind, &std::fs::read(common::root().join(path)).unwrap_or_else(|e| panic!("{}: {}", path, e))); }
+    fn boot(&mut self) {
+        // SAFETY: `&mut self` provides exclusive access to the live emulator.
+        assert_eq!(unsafe { esp32sim_boot(self.0, 0) }, 0);
+    }
+    fn run(&mut self, cycles: u32) -> u32 {
+        // SAFETY: `&mut self` provides exclusive access to the live emulator.
+        unsafe { esp32sim_run(self.0, cycles, 0.0) }
+    }
+    fn text_in(&mut self, s: &str) {
+        // SAFETY: `&mut self` provides exclusive access and `s` is readable for the call.
+        unsafe { esp32sim_in_text(self.0, s.as_ptr(), s.len()) }
+    }
+    /// (kind, payload) since the last call: 1 = text, 2 = binary
+    fn out(&mut self) -> Vec<(u32, Vec<u8>)> {
+        // SAFETY: `&mut self` provides exclusive access to the live emulator.
+        let n = unsafe { esp32sim_out_take(self.0) };
+        (0..n).map(|i| {
+            // SAFETY: `i` came from this drain, the emulator stays live, and no output mutation
+            // occurs until the payload is copied.
+            unsafe { let (k, p, l) = (esp32sim_out_kind(self.0, i), esp32sim_out_ptr(self.0, i), esp32sim_out_len(self.0, i)); (k, std::slice::from_raw_parts(p, l).to_vec()) }
+        }).collect()
+    }
+}
+impl Drop for Emu {
+    fn drop(&mut self) {
+        // SAFETY: This wrapper uniquely owns the live pointer and never uses it after Drop.
+        unsafe { esp32sim_delete(self.0) }
+    }
+}
+
+fn texts(msgs: &[(u32, Vec<u8>)]) -> Vec<String> { msgs.iter().filter(|m| m.0 == 1).map(|m| String::from_utf8_lossy(&m.1).to_string()).collect() }
+fn has(ts: &[String], needle: &str) -> bool { ts.iter().any(|t| t.contains(needle)) }
+
+#[test]
+#[ignore = "needs the ESP32-S3 mask ROM ELF"]
+fn s3_atech_speaks_the_web_protocol() {
+    let mut e = Emu::new("atech14", 8, 2);
+    e.load(0, &std::fs::read(common::rom("esp32s3_rev0")).unwrap());
+    e.load_file(1, "web/wasm/fw/public/atech-bootloader.bin"); e.load_file(2, "web/wasm/fw/public/atech-ptable.bin"); e.load_file(3, "web/wasm/fw/public/atech-firmware.bin");
+    e.load_file(6, "web/wasm/fw/public/atech-script1.txt");
+    // SAFETY: `e.0` is live and this test retains exclusive access to its wrapper.
+    assert_eq!(unsafe { esp32sim_run(e.0, 1000, 0.0) }, 9, "running before boot is refused");
+    e.boot();
+    let mut all = e.out();
+    assert!(has(&texts(&all), "\"t\":\"board\",\"name\":\"atech14\""), "{:?}", texts(&all));
+    e.text_in("{\"t\":\"knob\",\"d\":\"1\"}");
+    for _ in 0..30 { assert_eq!(e.run(24_000_000), 0); all.extend(e.out()); }   // 3 s: past the script's first button press and the knob
+    let ts = texts(&all);
+    assert!(has(&ts, "\"t\":\"serial\",\"src\":\"usb\"") && has(&ts, "ESP-ROM:esp32s3"), "the ROM banner arrived on the USB console");
+    assert!(has(&ts, "\"t\":\"stat\"") && has(&ts, "\"insns\":"), "statistics");
+    assert!(has(&ts, "\"t\":\"ring\",\"leds\":[["), "the WS2812 ring was pushed");
+    let bins: Vec<u8> = all.iter().filter(|m| m.0 == 2).map(|m| m.1[0]).collect();
+    assert!(bins.contains(&1) && bins.contains(&2), "a display frame (1) and audio (2) went out: kinds seen {:?}", bins);
+    let frame = all.iter().find(|m| m.0 == 2 && m.1[0] == 1).unwrap();
+    assert_eq!(&frame.1[1..5], &[160, 0, 80, 0], "the ST7735 frame is 160x80");
+    // SAFETY: `e.0` stays live and neither query overlaps mutable access.
+    assert!(unsafe { esp32sim_insns(e.0) } > 1e8 && unsafe { esp32sim_cpu_hz(e.0) } == 240e6);
+}
+
+#[test]
+#[ignore = "needs the ESP32-C3 mask ROM ELF"]
+fn c3_speaks_the_web_protocol() {
+    let mut e = Emu::new("esp32c3", 4, 0);
+    e.load(0, &std::fs::read(common::rom("esp32c3_rev3")).unwrap());
+    e.load_file(1, "web/wasm/fw/public/c3-hello-bootloader.bin"); e.load_file(2, "web/wasm/fw/public/c3-hello-ptable.bin"); e.load_file(3, "web/wasm/fw/public/c3-hello_world.bin");
+    e.boot();
+    let mut all = e.out();
+    for _ in 0..20 { assert_eq!(e.run(16_000_000), 0); all.extend(e.out()); }   // 2 s
+    let ts = texts(&all);
+    assert!(has(&ts, "\"name\":\"none\""), "a bare module: {:?}", &ts[..ts.len().min(3)]);
+    assert!(has(&ts, "\"src\":\"uart0\"") && has(&ts, "Hello world!"), "hello_world on UART0");
+    assert!(has(&ts, "\"t\":\"stat\""));
+    // SAFETY: `e.0` stays live and the query does not overlap mutable access.
+    assert_eq!(unsafe { esp32sim_cpu_hz(e.0) }, 160e6);
+    // SAFETY: `e.0` is live, names are readable, and null is valid with a zero argument length.
+    assert_eq!(unsafe { esp32sim_observer(e.0, b"coverage".as_ptr(), 8, std::ptr::null(), 0) }, 0);
+    // SAFETY: `e.0` is live, names are readable, and null is valid with a zero argument length.
+    assert_eq!(unsafe { esp32sim_observer(e.0, b"nope".as_ptr(), 4, std::ptr::null(), 0) }, 1);
+}
+
+#[test]
+#[ignore = "needs the ESP32-C6 mask ROM ELF"]
+fn c6_speaks_the_web_protocol() {
+    let mut e = Emu::new("esp32c6", 4, 0);
+    e.load(0, &std::fs::read(common::rom("esp32c6_rev0")).unwrap());
+    e.load_file(1, "web/wasm/fw/public/c6-hello-bootloader.bin"); e.load_file(2, "web/wasm/fw/public/c6-hello-ptable.bin"); e.load_file(3, "web/wasm/fw/public/c6-hello_world.bin");
+    e.boot();
+    let mut all = e.out();
+    for _ in 0..20 { assert_eq!(e.run(16_000_000), 0); all.extend(e.out()); }   // 2 s
+    let ts = texts(&all);
+    assert!(has(&ts, "\"name\":\"none\""), "a bare module: {:?}", &ts[..ts.len().min(3)]);
+    assert!(has(&ts, "\"src\":\"uart0\"") && has(&ts, "Hello world!"), "hello_world on UART0");
+    assert!(has(&ts, "\"t\":\"stat\""));
+    // SAFETY: `e.0` stays live and the query does not overlap mutable access.
+    assert_eq!(unsafe { esp32sim_cpu_hz(e.0) }, 160e6);
+}
+
+/// The ESP-Mosaico demo the page runs (`web/wasm/fw/s31-mosaico.json`): the S31 from its ROM,
+/// the board's scripted motion selected before boot, the LVGL UI up on the 480 x 480 CO5300, and a
+/// touch and the AI button through the web protocol reaching the firmware.
+#[test]
+#[ignore = "needs the ESP32-S31 mask ROM ELF"]
+fn s31_mosaico_speaks_the_web_protocol() {
+    let mut e = Emu::new("mosaico", 16, 16);
+    // SAFETY: `e.0` is live and this test retains exclusive access to its wrapper.
+    assert_eq!(unsafe { esp32sim_set_imu_motion(e.0, 1) }, 0, "the Mosaico has an IMU model");
+    e.load(0, &std::fs::read(common::rom("esp32s31_rev0")).unwrap());
+    e.load_file(1, "web/wasm/fw/public/s31-mosaico-demo-bootloader.bin"); e.load_file(2, "web/wasm/fw/public/s31-mosaico-demo-ptable.bin");
+    e.load_file(3, "web/wasm/fw/public/s31-mosaico-demo.bin");
+    e.boot();
+    let mut all = e.out();
+    let ui_up = |all: &[(u32, Vec<u8>)]| has(&texts(all), "demo: ui up");
+    for _ in 0..40 { if ui_up(&all) { break; } assert_eq!(e.run(32_000_000), 0); all.extend(e.out()); }   // up to 4 s
+    assert!(ui_up(&all), "the UI never came up: {:?}", texts(&all).iter().filter(|t| t.contains("serial")).collect::<Vec<_>>());
+    let ts = texts(&all);
+    assert!(has(&ts, "\"t\":\"board\",\"name\":\"mosaico\",\"chip\":\"esp32s31\""), "{:?}", &ts[..ts.len().min(3)]);
+    assert!(has(&ts, "demo: sensors imu=1 mag0=1 mag1=1"), "the BMI270 and both BMM150 answer");
+    e.text_in("{\"t\":\"touch\",\"x\":300,\"y\":200,\"down\":1}");
+    for _ in 0..3 { assert_eq!(e.run(32_000_000), 0); all.extend(e.out()); }
+    e.text_in("{\"t\":\"touch\",\"x\":300,\"y\":200,\"down\":0}");
+    e.text_in("{\"t\":\"btn\",\"pin\":7,\"v\":1}");
+    for _ in 0..3 { assert_eq!(e.run(32_000_000), 0); all.extend(e.out()); }
+    e.text_in("{\"t\":\"btn\",\"pin\":7,\"v\":0}");
+    for _ in 0..6 { assert_eq!(e.run(32_000_000), 0); all.extend(e.out()); }
+    let ts = texts(&all);
+    assert!(has(&ts, "demo: touch 1 at 300,200"), "the touch reached LVGL");
+    assert!(has(&ts, "demo: AI button 1"), "the AI button reached iot_button");
+    let frame = all.iter().rev().find(|m| m.0 == 2 && m.1[0] == 1).expect("a display frame went out");
+    assert_eq!(&frame.1[1..5], &[0xe0, 1, 0xe0, 1], "the CO5300 frame is 480x480");
+    // SAFETY: `e.0` stays live and neither query overlaps mutable access.
+    assert_eq!(unsafe { esp32sim_cpu_hz(e.0) }, 320e6);
+    // SAFETY: `e.0` is live and exclusively borrowed by this test.
+    assert_eq!(unsafe { esp32sim_set_imu_motion(e.0, 0) }, 1, "not once the machine has run");
+}
+
+/// The ESP32-S31 boards the page offers: `esp32s31` is a bare module, `mosaico` the ESP-Mosaico;
+/// scripted IMU motion needs a board with an IMU model.
+#[test]
+fn s31_boards_and_imu_motion() {
+    for (board, flash, motion) in [("mosaico", 16, 0), ("esp32s31", 2, 1), ("esp32c3", 4, 1), ("waveshare-amoled18-v2", 16, 0)] {
+        let e = Emu::new(board, flash, 0);
+        // SAFETY: `e.0` is live and exclusively borrowed by this test.
+        assert_eq!(unsafe { esp32sim_set_imu_motion(e.0, 1) }, motion, "{board}");
+        // SAFETY: as above.
+        assert_eq!(unsafe { esp32sim_set_imu_motion(e.0, 2) }, 1, "{board}: no mode 2");
+    }
+    let e = Emu::new("esp32s31", 2, 0);
+    // SAFETY: `e.0` stays live and the query does not overlap mutable access.
+    assert_eq!(unsafe { esp32sim_cpu_hz(e.0) }, 320e6);
+}
+
+#[test]
+fn camera_binary_input_reports_boards_without_a_camera() {
+    for board in ["none", "atech14", "waveshare-cam", "c3", "c6"] {
+        let mut e = Emu::new(board, 4, 0);
+        e.boot();
+        let red = [3, 1, 0, 1, 0, 255, 0, 0, 255];
+        // SAFETY: the emulator is live and red is readable for its length.
+        unsafe { esp32sim_in_bin(e.0, red.as_ptr(), red.len()); }
+        e.run(0);
+        let messages = texts(&e.out());
+        assert_eq!(has(&messages, "no camera on this board"), board != "waveshare-cam", "{board}");
+    }
+}
+
+#[test]
+fn sd_card_images_load_into_the_p4_socket_only() {
+    // SAFETY: each emulator is live and used by this thread alone; `d` is readable for the call.
+    let load = |e: &Emu, d: &[u8]| unsafe { esp32sim_load(e.0, 8, d.as_ptr(), d.len()) };
+    let p4 = Emu::new("esp32p4", 2, 0);
+    assert_eq!(load(&p4, &vec![0; 1 << 20]), 0, "a 1 MiB card on the P4");
+    assert_eq!(load(&p4, &[0; 512]), 1, "smaller than the card's 512 KiB capacity unit");
+    let s3 = Emu::new("none", 4, 0);
+    assert_eq!(load(&s3, &vec![0; 1 << 20]), 1, "no SD host on the S3 model");
+}
+
+/// An ELF32 with `symbols` (name, value, size) in its symbol table and nothing else.
+fn elf_with_symbols(symbols: &[(&str, u32, u32)]) -> Vec<u8> {
+    let put = |d: &mut Vec<u8>, off: usize, v: u32| d[off..off + 4].copy_from_slice(&v.to_le_bytes());
+    let mut strtab = vec![0u8];
+    let mut symtab = Vec::new();
+    for &(name, value, size) in symbols {
+        let mut sym = [0u8; 16];
+        sym[..4].copy_from_slice(&(strtab.len() as u32).to_le_bytes());
+        sym[4..8].copy_from_slice(&value.to_le_bytes());
+        sym[8..12].copy_from_slice(&size.to_le_bytes());
+        sym[12] = 2; // STT_FUNC
+        symtab.extend_from_slice(&sym);
+        strtab.extend_from_slice(name.as_bytes());
+        strtab.push(0);
+    }
+    let mut d = b"\x7fELF\x01\x01\x01\x00".to_vec();
+    d.resize(52 + 3 * 40, 0);
+    d[42] = 32; d[46] = 40; d[48] = 3;
+    put(&mut d, 32, 52);
+    let (sym_off, str_off) = (d.len() as u32, (d.len() + symtab.len()) as u32);
+    put(&mut d, 92 + 4, 2); put(&mut d, 92 + 16, sym_off); put(&mut d, 92 + 20, symtab.len() as u32);
+    put(&mut d, 92 + 24, 2); put(&mut d, 92 + 36, 16);
+    put(&mut d, 132 + 4, 3); put(&mut d, 132 + 16, str_off); put(&mut d, 132 + 20, strtab.len() as u32);
+    d.extend_from_slice(&symtab);
+    d.extend_from_slice(&strtab);
+    d
+}
+
+/// An application ELF with the symbols the virtual BLE controller needs, nothing else.
+fn virtual_controller_elf() -> Vec<u8> {
+    let base = 0x4038_8000;
+    elf_with_symbols(&[
+        ("esp_bt_controller_init", base, 0x400), ("xTaskCreatePinnedToCore", base + 0x400, 4), ("vTaskDelay", base + 0x500, 4),
+        ("esp_bt_controller_get_status", base + 0x600, 4), ("esp_bt_controller_enable", base + 0x610, 4),
+        ("esp_vhci_host_check_send_available", base + 0x620, 4), ("esp_vhci_host_send_packet", base + 0x630, 4),
+        ("esp_vhci_host_register_callback", base + 0x640, 4), ("_bt_controller_bss_start", 0x3fc9_0000, 0),
+        ("_bt_controller_bss_end", 0x3fc9_1000, 0)])
+}
+
+/// The virtual BLE controller from the page: enabled from the application ELF before boot on a
+/// chip that has it, refused otherwise with the reason on `host_log`; peer commands and the kept
+/// `[ble]` lines.
+#[test]
+fn virtual_ble_is_enabled_from_the_elf_and_takes_peer_commands() {
+    let base = 0x4038_8000;
+    let elf = virtual_controller_elf();
+    // SAFETY: each emulator is live and used by this thread alone; the buffers are readable for the call.
+    let enable = |e: &Emu, d: &[u8]| unsafe { esp32sim_ble_virtual(e.0, d.as_ptr(), d.len()) };
+    // SAFETY: as above.
+    let command = |e: &Emu, c: &str| unsafe { esp32sim_ble_virtual_command(e.0, c.as_ptr(), c.len()) };
+    // SAFETY: as above; the bytes are read before the next call.
+    let take = |e: &Emu| unsafe { let n = esp32sim_ble_virtual_take(e.0); String::from_utf8(std::slice::from_raw_parts(esp32sim_ble_ptr(e.0), n).to_vec()).unwrap() };
+    let p4 = Emu::new("esp32p4", 2, 0);
+    assert_eq!(enable(&p4, &elf), 1, "no virtual controller on the P4");
+    let s3 = Emu::new("none", 4, 0);
+    assert_eq!(command(&s3, "connect"), 1, "no controller yet");
+    assert_eq!(enable(&s3, b"not an ELF"), 1);
+    assert_eq!(enable(&s3, &elf_with_symbols(&[("esp_bt_controller_init", base, 0x400)])), 1, "a symbol missing");
+    assert_eq!(enable(&s3, &elf), 0);
+    assert_eq!(command(&s3, "fly away"), 1);
+    assert_eq!(command(&s3, "connect"), 0);
+    assert_eq!(command(&s3, "read 0x0003"), 0);
+    assert_eq!(take(&s3), "", "nothing logged before the guest runs");
+}
+
+/// The devices around the station from the page: the `--ble-nearby` specs, one per line, once the
+/// virtual controller is on; whatever the option refuses is refused here.
+#[test]
+fn ble_nearby_takes_the_options_specs_once_the_virtual_controller_is_on() {
+    let elf = virtual_controller_elf();
+    // SAFETY: each emulator is live and used by this thread alone; the buffers are readable for the call.
+    let nearby = |e: &Emu, specs: &[u8]| unsafe { esp32sim_ble_nearby(e.0, specs.as_ptr(), specs.len()) };
+    let p4 = Emu::new("esp32p4", 2, 0);
+    assert_eq!(nearby(&p4, b"name=Thermo"), 1, "no virtual controller on the P4");
+    let s3 = Emu::new("none", 4, 0);
+    assert_eq!(nearby(&s3, b"name=Thermo"), 1, "no controller yet");
+    // SAFETY: as above.
+    assert_eq!(unsafe { esp32sim_ble_virtual(s3.0, elf.as_ptr(), elf.len()) }, 0);
+    assert_eq!(nearby(&s3, b"name=Thermo,rssi=-70,addr=c4:aa:01:02:03:04,type=public,rsp=03030f18\nname=Scale,rssi=-82"), 0);
+    assert_eq!(nearby(&s3, b"\r\n  name=Thermo\r\n\r\nname=Scale\r\n"), 0, "blank lines and CRLF");
+    assert_eq!(nearby(&s3, b""), 0, "none");
+    assert_eq!(nearby(&s3, b"name=Thermo\nname=Thermo"), 1, "two devices on one address");
+    assert_eq!(nearby(&s3, b"colour=red"), 1, "an unknown key");
+    assert_eq!(nearby(&s3, b"name=Thermo\n\xff"), 1, "not UTF-8");
+    let many: String = (0..33).map(|i| format!("name=d{i}\n")).collect();
+    assert_eq!(nearby(&s3, many.as_bytes()), 1, "more than 32");
+    assert_eq!(nearby(&s3, many.lines().skip(1).collect::<Vec<_>>().join("\n").as_bytes()), 0, "32");
+}
+
+/// The station's NAT through the page: a network to carry first, then records and events; nothing
+/// without the relay.
+#[test]
+fn nat_relay_needs_the_access_point_and_answers_unknown_flows_with_zero() {
+    let e = Emu::new("none", 4, 0);
+    // SAFETY: the emulator is live and used by this thread alone; the buffers are readable for the call.
+    let relay = |flags| unsafe { esp32sim_nat_relay(e.0, flags) };
+    // SAFETY: as above.
+    let take = || unsafe { esp32sim_nat_take(e.0) };
+    // SAFETY: as above.
+    let event = |kind, id, arg, d: &[u8]| unsafe { esp32sim_nat_event(e.0, kind, id, arg, d.as_ptr(), d.len()) };
+    assert_eq!(relay(1), 1, "no access point yet");
+    assert_eq!(take(), 0);
+    let spec = "ssid=esp32sim";
+    // SAFETY: as above.
+    assert_eq!(unsafe { esp32sim_wifi(e.0, spec.as_ptr(), spec.len()) }, 0);
+    assert_eq!(event(1, 1, 65536, &[]), 0, "no relay yet");
+    assert_eq!(relay(1 | 2 | 4), 0);
+    assert_eq!(take(), 0, "nothing queued before the guest runs");
+    assert_eq!(event(1, 1, 65536, &[]), 0, "no such flow");
+    assert_eq!(event(3, 1, 0, b"late"), 4, "data for a forgotten flow is taken and dropped");
+    assert_eq!(event(8, 7, 60, &[1, 2, 3, 4]), 0, "no such lookup");
+    assert_eq!(event(10, 1, 0, &[]), 0, "an unknown kind");
+    // SAFETY: as above.
+    assert_eq!(unsafe { esp32sim_wifi(e.0, spec.as_ptr(), spec.len()) }, 0);
+    assert_eq!(event(3, 1, 0, b"late"), 0, "a new access point drops the relay with its network");
+    assert_eq!(relay(1), 0);
+    assert_eq!(event(3, 1, 0, b"late"), 4);
+    assert_eq!(relay(0), 0, "off again");
+    assert_eq!(event(3, 1, 0, b"late"), 0, "no relay");
+}
+
+/// Several access points from one `esp32sim_wifi` text, a line each, refused as the CLI's repeated
+/// `--wifi` refuses them; and the Network panel only on a chip with WiFi, announced once.
+#[test]
+fn wifi_takes_several_access_points_and_the_network_panel_needs_a_radio() {
+    // SAFETY: each emulator is live and used by this thread alone; the buffers are readable for the call.
+    let wifi = |e: &Emu, spec: &[u8]| unsafe { esp32sim_wifi(e.0, spec.as_ptr(), spec.len()) };
+    // SAFETY: as above.
+    let netmon = |e: &Emu| unsafe { esp32sim_netmon(e.0) };
+    let p4 = Emu::new("esp32p4", 2, 0);
+    assert_eq!(netmon(&p4), 1, "no radio on the P4 without its co-processor");
+    let mut s3 = Emu::new("none", 4, 0);
+    assert_eq!(wifi(&s3, b""), 0, "an empty text is the default access point, as before");
+    assert_eq!(wifi(&s3, b"ssid=home,psk=password1\r\n\r\n  ssid=guest,chan=11\n"), 0, "two access points, blank lines and CRLF");
+    assert_eq!(wifi(&s3, b"ssid=home\nssid=home"), 1, "two access points with one SSID");
+    assert_eq!(wifi(&s3, b"ssid=a\nssid=b,bssid=02:53:49:4d:00:01"), 1, "two access points on one BSSID");
+    assert_eq!(wifi(&s3, b"ssid=a\nssid=b,epoch=1700000000"), 1, "the clock belongs to the first");
+    let nine: String = (0..9).map(|i| format!("ssid=ap{i}\n")).collect();
+    assert_eq!(wifi(&s3, nine.as_bytes()), 1, "more than 8");
+    assert_eq!(wifi(&s3, b"ssid=home\n\xff"), 1, "not UTF-8");
+    assert_eq!(netmon(&s3), 0);
+    assert_eq!(netmon(&s3), 0, "a second call changes nothing");
+    let hello = texts(&s3.out()).into_iter().filter(|t| t.contains("\"t\":\"netmon\"")).count();
+    assert_eq!(hello, 1, "the panel is announced once");
+}
+
+/// The page's WiFi demo (`web/wasm/fw/c6-wifi-station.json`): the committed station firmware of
+/// `examples/c6-wifi-station` on a bare C6, two access points and two networks around it. The
+/// scan lists all four, the station joins the first, takes its lease and pings the gateway, and
+/// the Network panel gets those frames both ways: ARP, and DHCP to port 67.
+#[test]
+#[ignore = "needs the ESP32-C6 mask ROM ELF"]
+fn c6_station_frames_reach_the_network_panel() {
+    let mut e = Emu::new("esp32c6", 4, 0);
+    e.load(0, &std::fs::read(common::rom("esp32c6_rev0")).unwrap());
+    e.load_file(1, "web/wasm/fw/public/c6-wifi-bootloader.bin"); e.load_file(2, "web/wasm/fw/public/c6-wifi-ptable.bin"); e.load_file(3, "web/wasm/fw/public/c6-wifi_station.bin");
+    let aps = "ssid=esp32sim,psk=esp32sim-pass\nssid=esp32sim-guest,chan=11";
+    let near = "ssid=Workshop,chan=1,rssi=-67\nssid=Cafe,chan=11,rssi=-81,secure=0";
+    // SAFETY: `e.0` is live and this test retains exclusive access to its wrapper; the texts are readable for the calls.
+    unsafe {
+        assert_eq!(esp32sim_wifi(e.0, aps.as_ptr(), aps.len()), 0);
+        assert_eq!(esp32sim_wifi_nearby(e.0, near.as_ptr(), near.len()), 0);
+        assert_eq!(esp32sim_netmon(e.0), 0);
+    }
+    e.boot();
+    let mut all = e.out();
+    for _ in 0..140 { assert_eq!(e.run(16_000_000), 0); all.extend(e.out()); }   // 14 s: the fifth ping's answer is at 12.6 s
+    let ts = texts(&all);
+    assert!(has(&ts, "\"t\":\"netmon\",\"linktype\":1"), "the panel was announced");
+    let console = ts.iter().filter(|t| t.contains("\"t\":\"serial\"")).cloned().collect::<String>();
+    for line in ["SCAN found=4", "ssid=\\\"esp32sim-guest\\\" channel=11", "ssid=\\\"Workshop\\\" channel=1", "ssid=\\\"Cafe\\\" channel=11",
+                 "CONNECTED channel=6 bssid=02:53:49:4d:00:01", "GOT_IP ip=10.0.2.15", "PING done sent=5 received=5"] {
+        assert!(console.contains(line), "{line} missing from the console:\n{console}");
+    }
+    let frames: Vec<&[u8]> = all.iter().filter(|m| m.0 == 2 && m.1[0] == 5).map(|m| &m.1[..]).collect();
+    let ethertype = |f: &[u8]| u16::from_be_bytes([f[22], f[23]]);
+    assert!(frames.iter().all(|f| f.len() >= 10 + 14 && f[1] <= 1), "[5][dir][µs u64][Ethernet frame]");
+    assert!(frames.iter().any(|f| f[1] == 0) && frames.iter().any(|f| f[1] == 1), "frames both ways");
+    assert!(frames.iter().any(|f| ethertype(f) == 0x0806), "ARP");
+    // IPv4 (20-byte header) carrying UDP to the DHCP server port
+    assert!(frames.iter().any(|f| ethertype(f) == 0x0800 && f[24 + 9] == 17 && u16::from_be_bytes([f[24 + 22], f[24 + 23]]) == 67), "DHCP");
+}

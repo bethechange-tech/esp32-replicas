@@ -1,0 +1,35 @@
+{
+  "name": "esp32-replicas",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.23.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "guard:hash": "node test/guards/support/guard-hash.ts",
+    "fetch:roms": "sh third_party/esp32sim/tools/fetch-rom-elfs.sh build/roms",
+    "engine:build": "sh tools/build-engine.sh",
+    "engine:test": "sh tools/engine-test.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@replicas/cli": "workspace:*",
+    "@replicas/core": "workspace:*",
+    "@replicas/engine": "workspace:*",
+    "@replicas/firmware": "workspace:*",
+    "@replicas/network": "workspace:*",
+    "@replicas/setup": "workspace:*",
+    "@types/node": "24.10.1",
+    "eslint": "10.15.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0",
+    "vitest": "5.1.1",
+    "yaml": "2.9.1"
+  }
+}

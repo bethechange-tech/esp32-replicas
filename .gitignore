@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.env*
+.private-hashes
+*.bin
+*.elf
+*.img
+*.pem
+*.key
+.DS_Store
+!test/goldens/**
+!third_party/**/*.bin
+build/

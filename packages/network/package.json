@@ -1,0 +1,16 @@
+{
+  "name": "@replicas/network",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@replicas/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@replicas/firmware": "workspace:*"
+  }
+}
