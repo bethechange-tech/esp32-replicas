@@ -137,11 +137,6 @@
         "value": 115200,
         "unit": "baud",
         "source": "https://esphome.io/components/uart/"
-      },
-      "power-hold": {
-        "value": 3500,
-        "unit": "millisecond",
-        "source": "https://www.waveshare.com/wiki/ESP32-S3-LCD-1.69"
       }
     },
     "flags": {},

@@ -1,4 +1,5 @@
 import type { BoardId, FirmwareSource, FlashImage, Output, WifiSpec } from "@replicas/core";
+import { FactsRefused } from "@replicas/core";
 import { FlashImageRefused } from "@replicas/firmware";
 import type { BoardRun } from "../board-run";
 import type { RunArguments } from "../run-arguments";
@@ -42,6 +43,7 @@ export class RunCommand {
       image = await this.parts.images.at(args.image).image(args.board);
     } catch (error) {
       if (error instanceof FlashImageRefused) return this.refuse(`image refused: ${error.refusal}`);
+      if (error instanceof FactsRefused) return this.refuse(`no replica of ${args.board} is available`);
       throw error;
     }
     let session: BoardSession;

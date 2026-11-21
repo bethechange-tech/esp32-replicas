@@ -36,7 +36,8 @@ const STATUS_TOPIC = "replica/replica-small-screen/status";
 const FACTS = new FileBoardFacts(S1Fixtures.factsPath()).facts("small-screen");
 const BOOT_GPIO = FactLookup.pin({ facts: FACTS, name: "boot-button" });
 const POWER_GPIO = FactLookup.pin({ facts: FACTS, name: "power-button" });
-const POWER_HOLD_FACT_MILLISECONDS = FactLookup.number({ facts: FACTS, name: "power-hold" });
+/** The sample firmware's own setting (`min_length` of the PWR click in small-screen.yaml), asserted equal in s1-sample-matches-facts. */
+const POWER_HOLD_FACT_MILLISECONDS = 3_500;
 const PACK_VOLTS = 3.75;
 const PACK_TOLERANCE = 0.05;
 const MONITOR_VOLTS = 13;
@@ -224,5 +225,15 @@ describe.skipIf(!S1Fixtures.ready())("small-screen (needs build/esp32sim.wasm, b
       expect(await run({ image: damaged, output })).toBe(2);
       expect(output.written()).toBe("image refused: bad-magic\n");
     }, STACK_TIMEOUT);
+  });
+});
+
+describe("a board with no replica yet is refused by name", () => {
+  it("panel-7 gives one line and exit 2, not a stack", async () => {
+    const output = new RecordingOutput();
+    const code = await Composition.cli({ root: RepositoryRoot.PATH, output }).execute(["run", "--board", "panel-7", "--image", "missing.bin"]);
+    expect(code).toBe(2);
+    expect(output.written().trim().split("\n")).toHaveLength(1);
+    expect(output.written()).toContain("panel-7");
   });
 });

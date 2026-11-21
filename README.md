@@ -57,8 +57,8 @@ pnpm replica run --board small-screen --image ./factory.bin --wifi ssid=lab,psk=
      --map broker.lab.test=local
 ```
 
-Nothing about your image leaves your machine. Host names belong in a config file you keep
-outside this repository.
+Nothing about your image leaves your machine. A name your image dials is answered only when
+you map it with `--map`.
 
 ## Contributing and security
 

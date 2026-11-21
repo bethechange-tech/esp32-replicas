@@ -167,7 +167,9 @@ Rule: §7
 
 If the same fact exists in two places it will diverge. Every pin, bus, address, size and
 orientation is in `facts/boards.json`, each fact with a public https source and, for a number,
-its unit. A board class is built from those facts and holds no number but 0 and 1, named
+its unit. A choice of the model that is not a fact about the hardware (a mirrored glass)
+is a `decisions` entry in the same file: no source, and explained in `docs/boards.md`. A
+board class is built from those facts and holds no number but 0 and 1, named
 constant or not; a device class may name its register constants. Where a duplicate is
 unavoidable, assert it equal by identity.
 

@@ -45,6 +45,10 @@ describe("the sample firmware says what the facts say", () => {
     expect(gpio(sample.sensor.find((sensor) => sensor.platform === "adc")?.pin)).toBe(pin("battery-sense"));
   });
 
+  it("the PWR hold the tests use is the sample's own setting", () => {
+    expect(yaml).toContain("min_length: 3500ms");
+  });
+
   it("the addresses, sizes, rates and divider of the YAML are the numbers of the facts", () => {
     const display = sample.display[0];
     expect(sample.sensor.find((sensor) => sensor.platform === "ina226")?.address).toBe(number("current-monitor-address"));
