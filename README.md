@@ -8,7 +8,7 @@ The code is TypeScript. The emulation core is [esp32sim](https://github.com/mikr
 (Rust, MIT), vendored and run as WebAssembly; see `NOTICE.md`.
 
 > Status: the repository rules, guards, public files and the engine (esp32sim as WebAssembly, driven
-> from TypeScript) are in place. The boards arrive stage by stage; `docs/design.md` is the design.
+> from TypeScript) are in place. The boards arrive stage by stage; `docs/design.md` is the design and `docs/roadmap.md` says what is built and what comes next.
 
 ## The boards
 
