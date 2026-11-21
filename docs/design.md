@@ -291,7 +291,7 @@ As small-screen, plus a CST816T touch controller at I2C `0x15`, INT on GPIO14, R
 - **What they log.** Each sample logs one line per heard BLE advertiser name, so the scan can be asserted.
 - **Where they come from.** `tools/build-samples.sh` builds `factory.bin` **and `firmware.elf`**, the ELF that BLE needs.
   - CI builds them, cached by the YAML and digest.
-  - `samples.lock` pins their SHA-256.
+  - `samples.lock` pins their SHA-256, the image (the `linux/amd64` manifest digest) and the build platform. One canonical binary: the script builds on that platform on every host, emulated where the host differs, because arm64 and amd64 toolchains produce different bytes. Re-lock by building twice and comparing the printed hashes.
   - Once a release is published, contributors can download them instead of building, verified against the lock.
 - **Licence.** The YAML is MIT. The built binaries contain ESPHome's GPLv3 C++ runtime, so release assets ship with a NOTICE pointing at this source and the pinned ESPHome version (Q7).
 

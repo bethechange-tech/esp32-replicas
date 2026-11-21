@@ -4,6 +4,10 @@ import { RomDownloadFrames } from "./support/rom-download-frames";
 import { S0EngineHarness } from "./support/s0-engine-harness";
 import { S0Fixtures } from "./support/s0-fixtures";
 
+const MEASURED_ROM_DOWNLOAD_MILLISECONDS = 4_200;
+const SLOW_HOST_MARGIN = 10;
+const ROM_DOWNLOAD_TIMEOUT = MEASURED_ROM_DOWNLOAD_MILLISECONDS * SLOW_HOST_MARGIN;
+
 describe.skipIf(!S0Fixtures.engineReady())("the engine through TypeScript (needs build/esp32sim.wasm and build/roms)", () => {
   describe("hello world boots through the TypeScript host (AC0b.3)", () => {
     it.each(S0EngineHarness.chips())("%s: the console equals upstream's golden, byte for byte", async (chip) => {
@@ -49,7 +53,7 @@ describe.skipIf(!S0Fixtures.engineReady())("the engine through TypeScript (needs
       expect(RomDownloadFrames.isSuccess(await send(every))).toBe(true);
       expect(RomDownloadFrames.isChecksumFailure(await send(damaged))).toBe(true);
       expect(RomDownloadFrames.isChecksumFailure(await send(every))).toBe(false);
-    });
+    }, ROM_DOWNLOAD_TIMEOUT);
 
     it("sends every byte value as lossless hex on the engine's byte-exact message", async () => {
       const sent: string[] = [];

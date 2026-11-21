@@ -1,12 +1,13 @@
 {
   "esphome": {
     "version": "2026.10.2",
-    "image": "esphome/esphome@sha256:c994a49a945094643b14c213bfd500a95ffed94cd68848772828192e126bd375"
+    "platform": "linux/amd64",
+    "image": "esphome/esphome@sha256:6ed1e5593bf7dd4563c62f89b23fce00065e7e746662c3ea48f0592506d1964f"
   },
   "samples": {
     "small-screen": {
-      "factorySha256": "c6fe4bec367e7770721c7fe1a06f94dfaf003911eb8acd64f56984925293e877",
-      "elfSha256": "d498b559d49deb7c2c1ec9e0ba29c8f628aff60c0e3bc95987cd1dd649f3de5d"
+      "factorySha256": "1279db58ebd42460b0056753cbec6b99ec777bebb29a4e9573bff34cfb9e2459",
+      "elfSha256": "e01cfa191e7e5a6ea29d31f1f9fc444a19164acf661a98fdddc08dc31cdb9ed7"
     }
   }
 }
