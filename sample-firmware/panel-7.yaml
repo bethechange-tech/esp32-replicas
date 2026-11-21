@@ -1,0 +1,81 @@
+substitutions:
+  name: replica-panel-7
+
+esphome:
+  name: ${name}
+  project:
+    name: replica.panel-7
+    version: "1.0.0"
+  includes:
+    - common/replica-ca.h
+  on_boot:
+    - priority: 600
+      then:
+        - lambda: id(broker_link)->set_ca_certificate(ReplicaCa::pem());
+    - priority: -100
+      then:
+        - component.update: panel
+        - delay: 4s
+        - lambda: |-
+            static const uint8_t backlight_on = 0x10;
+            id(bus_a)->write(0x30, &backlight_on, 1);
+            ESP_LOGI("backlight", "helper told to light the panel");
+
+esp32:
+  variant: esp32s3
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  partitions: partitions.csv
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+packages:
+  logger: !include common/logger.yaml
+  network: !include common/network.yaml
+
+i2c:
+  id: bus_a
+  sda: GPIO15
+  scl: GPIO16
+  frequency: 400kHz
+
+display:
+  - platform: mipi_rgb
+    id: panel
+    model: CROWPANEL-ADVANCE-7
+    update_interval: never
+    auto_clear_enabled: false
+    pages:
+      - id: colour_bars
+        lambda: |-
+          const Color bars[8] = {Color(255, 255, 255), Color(255, 255, 0), Color(0, 255, 255), Color(0, 255, 0),
+                                 Color(255, 0, 255), Color(255, 0, 0), Color(0, 0, 255), Color(0, 0, 0)};
+          for (int i = 0; i < 8; i++) it.filled_rectangle(i * 100, 0, 100, 480, bars[i]);
+          it.filled_rectangle(0, 0, 200, 60, Color(255, 128, 0));
+          it.filled_rectangle(0, 0, 60, 200, Color(255, 128, 0));
+          it.filled_rectangle(10, 10, 40, 40, Color(0, 0, 0));
+      - id: ruler
+        lambda: |-
+          it.fill(Color(32, 32, 96));
+          for (int y = 0; y < 480; y += 40) it.filled_rectangle(0, y, (y / 40 + 1) * 60, 20, Color(255, 255, 255));
+          it.filled_rectangle(700, 380, 100, 100, Color(0, 255, 0));
+
+touchscreen:
+  - platform: gt911
+    id: panel_touch
+    address: 0x5D
+    display: panel
+    on_touch:
+      - logger.log:
+          level: INFO
+          format: "touch at %d,%d"
+          args: ["touch.x", "touch.y"]
+      - lambda: |-
+          if (touch.x >= 750 && touch.y >= 430) App.safe_reboot();
+    on_release:
+      - display.page.show_next: panel
+      - component.update: panel

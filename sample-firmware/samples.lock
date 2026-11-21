@@ -12,6 +12,10 @@
     "small-screen-touch": {
       "factorySha256": "e2afcc23b7dc6f34fcdbff0371b6b5b2d50eeebed81d614a41ff30fde9e23a0e",
       "elfSha256": "320648c1e08a56a3b90960e526e084118fed48c32c86696533f43daec2c83515"
+    },
+    "panel-7": {
+      "factorySha256": "4dc5ce3ead7ec1b540aa88c26c79d2c3dc85d43501bbc3cfcd7d17c451803d11",
+      "elfSha256": "192271e19d8d31c26045e65f5f7708053d7c85603e00588863a8f886a35d84a0"
     }
   }
 }

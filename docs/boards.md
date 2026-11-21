@@ -45,3 +45,29 @@ The register map and the chip identifiers are the ones in ESPHome's driver at th
 **Not modelled:** gestures (register `0x01` reads 0), more than one finger, the event flag in the position's high bits, sleep and auto-sleep (`0xE5`, `0xFE`), and the IRQ control bits' meaning (the value is kept, and INT pulses whatever it holds). The firmware version and factory ID read 0.
 
 **Sample firmware** `sample-firmware/small-screen-touch.yaml` is `small-screen.yaml` plus a `cst816` touchscreen on GPIO14 and GPIO13, and it shares `common/*` with it. A tap (the finger down, then up, each with an INT pulse) shows the next page and logs `touch at X,Y` when the finger lands. A test asserts that both samples draw the same screen, so the two boards share one set of goldens (`test/goldens/small-screen/`). Built, hashed and locked like the first sample.
+
+## panel-7: Elecrow CrowPanel Advance 7.0
+
+CLI id `panel-7`. Class `PanelBoard`, built from the facts and three devices. Its facts are the `panel-7` entry of `facts/boards.json`.
+
+| Fact | Value | Source |
+| --- | --- | --- |
+| Display | 800 x 480 parallel RGB565, pixel clock 20 MHz, pulse width 4, front and back porch 8 on both axes | ESPHome's `mipi_rgb` model `CROWPANEL-ADVANCE-7`, [`elecrow.py`](https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py) at the version `samples.lock` pins |
+| Display pins | enable 42, horizontal sync 40, vertical sync 41, pixel clock 39; red `7, 17, 18, 3, 46`; green `9, 10, 11, 12, 13, 14`; blue `21, 47, 48, 45, 38` | the same file |
+| Touch | GT911 at I2C `0x5D` | the driver's primary address, [`gt911_touchscreen.cpp`](https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/gt911/touchscreen/gt911_touchscreen.cpp) (`PRIMARY_ADDRESS`) |
+| I2C | SDA 15, SCL 16, 400 kHz | a third-party project's pin header for this board, [`board_pins.h`](https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/board_pins.h) (`I2C_SDA`, `I2C_SCL`, `I2C_HZ`); a second public ESPHome configuration, [`hardware-crowpanel-advance7.yaml`](https://github.com/djb-rh/Joshua/blob/96a9300678040a715f9ad031bc3ef7318b8ef6bf/hardware-crowpanel-advance7.yaml), uses the same pins. **Unconfirmed against the vendor:** Elecrow's own page states none of these, so they are as reliable as those projects |
+| Backlight helper | I2C `0x30`, switched on by the byte `0x10` | the same project's [`panel_mcu.h`](https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/panel_mcu.h): a companion microcontroller at `0x30`, written one bare byte with no register; on V1.2 `0x10` is on and `0x05` off. From V1.3 the scale is inverted (0 brightest, 244 dimmest, 245 off), so `0x10` is on there too, but at a dim level. **Unconfirmed against the vendor:** the project says Elecrow publish no specification for the part |
+
+ESPHome's model carries no interrupt or reset pin for the touch controller, and the sample wires none: the driver polls. The chip, 16 MB flash and 8 MB octal PSRAM are taken from the vendor's page.
+
+**Modelled**
+
+| Part | Device class | What it does |
+| --- | --- | --- |
+| Parallel RGB panel | `RgbFrame` | Holds the latest whole frame the chip's LCD_CAM peripheral scanned out, as the firmware's framebuffer holds it (big-endian RGB565, which is what ESPHome's driver writes). A frame that is not 800 x 480 is dropped and counted. |
+| Backlight helper, I2C `0x30` | `BacklightHelper` | Dark until the byte `0x10` is written to it; every other byte is acknowledged and ignored. `PanelBoard.frame` returns an all-black frame until then, as the real board shows a dark panel to a firmware that never lights it. |
+| GT911 touch controller, I2C `0x5D` | `Gt911` | One touch. Registers are addressed by two bytes, high first, as the driver does: the maximum position at `0x8048` (the panel's size, low byte first), the switches at `0x804D`, the touch state at `0x814E` (bit 7 data ready, bits 0 to 2 the count) and the touch at `0x814F` (id, X low, X high, Y low, Y high). While the finger rests the state stays ready; after it lifts the state reads ready with no touch until the driver clears it, which is how the driver sees a release. |
+
+**Not modelled:** more than one finger, the touch size and the key byte (the size reads a fixed value and the key byte 0), the configuration area other than what the driver reads, the interrupt pin, the helper chip's other commands (brightness, off) and the revision-dependent meaning of the byte, and the pixel clock's timing: the engine's own LCD_CAM model decides when a frame completes.
+
+**Sample firmware** `sample-firmware/panel-7.yaml` uses ESPHome's `mipi_rgb` display with the model above and no pins of its own, a `gt911` touchscreen at `0x5D`, and `common/*` like the other samples. It draws two pages; a tap (finger down, then up) shows the next page and logs `touch at X,Y`. A touch in the bottom-right corner restarts it, standing in for the `restart` line the small-screen samples read. Four seconds after boot it writes `0x10` to `0x30`, so that the dark panel can be observed before the lit one; the real firmware for this board has no reason to wait. Built, hashed and locked like the other samples; `tools/build-samples.sh` also copies the model table out of the locked ESPHome image to `build/samples/panel-7/display-model.py`, which the pin test reads.

@@ -305,5 +305,213 @@
       "display-mirror-x": true,
       "display-mirror-y": true
     }
+  },
+  "panel-7": {
+    "model": {
+      "value": "Elecrow CrowPanel Advance 7.0",
+      "unit": "none",
+      "source": "https://www.elecrow.com/wiki/CrowPanel_Advance_7.0-HMI_ESP32_AI_Display.html"
+    },
+    "chip": {
+      "value": "esp32s3",
+      "unit": "none",
+      "source": "https://www.elecrow.com/wiki/CrowPanel_Advance_7.0-HMI_ESP32_AI_Display.html"
+    },
+    "flashBytes": {
+      "value": 16777216,
+      "unit": "byte",
+      "source": "https://www.elecrow.com/wiki/CrowPanel_Advance_7.0-HMI_ESP32_AI_Display.html"
+    },
+    "psramBytes": {
+      "value": 8388608,
+      "unit": "byte",
+      "source": "https://www.elecrow.com/wiki/CrowPanel_Advance_7.0-HMI_ESP32_AI_Display.html"
+    },
+    "pins": {
+      "display-data-enable": {
+        "value": 42,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-horizontal-sync": {
+        "value": 40,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-vertical-sync": {
+        "value": 41,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-pixel-clock": {
+        "value": 39,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-red-0": {
+        "value": 7,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-red-1": {
+        "value": 17,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-red-2": {
+        "value": 18,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-red-3": {
+        "value": 3,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-red-4": {
+        "value": 46,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-0": {
+        "value": 9,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-1": {
+        "value": 10,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-2": {
+        "value": 11,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-3": {
+        "value": 12,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-4": {
+        "value": 13,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-green-5": {
+        "value": 14,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-blue-0": {
+        "value": 21,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-blue-1": {
+        "value": 47,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-blue-2": {
+        "value": 48,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-blue-3": {
+        "value": 45,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-blue-4": {
+        "value": 38,
+        "unit": "gpio",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "i2c-data": {
+        "value": 15,
+        "unit": "gpio",
+        "source": "https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/board_pins.h"
+      },
+      "i2c-clock": {
+        "value": 16,
+        "unit": "gpio",
+        "source": "https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/board_pins.h"
+      }
+    },
+    "numbers": {
+      "display-visible-columns": {
+        "value": 800,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-visible-rows": {
+        "value": 480,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-pixel-clock-rate": {
+        "value": 20000000,
+        "unit": "hertz",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-horizontal-pulse-width": {
+        "value": 4,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-horizontal-front-porch": {
+        "value": 8,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-horizontal-back-porch": {
+        "value": 8,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-vertical-pulse-width": {
+        "value": 4,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-vertical-front-porch": {
+        "value": 8,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "display-vertical-back-porch": {
+        "value": 8,
+        "unit": "pixel",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/mipi_rgb/models/elecrow.py"
+      },
+      "i2c-bus": {
+        "value": 0,
+        "unit": "none",
+        "source": "https://esphome.io/components/i2c/"
+      },
+      "i2c-rate": {
+        "value": 400000,
+        "unit": "hertz",
+        "source": "https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/board_pins.h"
+      },
+      "touch-address": {
+        "value": 93,
+        "unit": "i2c-address",
+        "source": "https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/gt911/touchscreen/gt911_touchscreen.cpp"
+      },
+      "backlight-helper-address": {
+        "value": 48,
+        "unit": "i2c-address",
+        "source": "https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/panel_mcu.h"
+      },
+      "backlight-helper-on-command": {
+        "value": 16,
+        "unit": "none",
+        "source": "https://github.com/robominds/Crowpanel-Advance-7.0-HMI-Display/blob/dd9cee14af3d39902bc2f0acb82d96444aa95f08/src/panel_mcu.h"
+      }
+    },
+    "flags": {},
+    "decisions": {}
   }
 }

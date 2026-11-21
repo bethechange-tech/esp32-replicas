@@ -21,6 +21,7 @@ export class Sanctions {
     { file: "packages/setup/src/improv-serial.ts", name: "ImprovRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/devices/src/cst816.ts", name: "Cst816PositionRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
     { file: "packages/boards/src/small-screen-board.ts", name: "NoTouchController", reason: "an exception is a value built where it is thrown, not a collaborator" },
+    { file: "packages/devices/src/gt911.ts", name: "Gt911PositionRefused", reason: "an exception is a value built where it is thrown, not a collaborator" },
   ];
 
   /** Composition roots are the only files that may build a concrete class (S0b and later add the files). */

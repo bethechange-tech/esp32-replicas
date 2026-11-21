@@ -229,11 +229,11 @@ describe.skipIf(!S1Fixtures.ready())("small-screen (needs build/esp32sim.wasm, b
 });
 
 describe("a board with no replica yet is refused by name", () => {
-  it("panel-7 gives one line and exit 2, not a stack", async () => {
+  it("headless gives one line and exit 2, not a stack", async () => {
     const output = new RecordingOutput();
-    const code = await Composition.cli({ root: RepositoryRoot.PATH, output }).execute(["run", "--board", "panel-7", "--image", "missing.bin"]);
+    const code = await Composition.cli({ root: RepositoryRoot.PATH, output }).execute(["run", "--board", "headless", "--image", "missing.bin"]);
     expect(code).toBe(2);
     expect(output.written().trim().split("\n")).toHaveLength(1);
-    expect(output.written()).toContain("panel-7");
+    expect(output.written()).toContain("headless");
   });
 });

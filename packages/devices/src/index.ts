@@ -4,3 +4,6 @@ export * from "./ina226";
 export * from "./power-latch";
 export * from "./line-source";
 export * from "./cst816";
+export * from "./rgb-frame";
+export * from "./gt911";
+export * from "./backlight-helper";

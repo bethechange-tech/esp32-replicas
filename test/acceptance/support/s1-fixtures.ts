@@ -107,7 +107,7 @@ export class S1Fixtures {
     return args.holds();
   }
 
-  private static caWrite(args: { image: FlashImage; caPem: string }): FlashImage {
+  static caWrite(args: { image: FlashImage; caPem: string }): FlashImage {
     const place = PartitionTable.find({ image: args.image, name: CA_PARTITION });
     return { bytes: Uint8Array.from([...new TextEncoder().encode(args.caPem), NUL]), offset: place.offset };
   }

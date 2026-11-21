@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { FactLookup, type BoardFactsSource, type BoardId, type BoardReplica, type FirmwareSource, type GuestNetwork, type Output, type WifiSpec } from "@replicas/core";
-import { SmallScreenBoard, type SmallScreenDevices } from "@replicas/boards";
-import { Cst816, DcsPanel, Ina226, LineSource, PowerLatch } from "@replicas/devices";
+import { FactLookup, type BoardDeclaration, type BoardFactsSource, type BoardId, type BoardReplica, type FirmwareSource, type GuestNetwork, type Output, type WifiSpec } from "@replicas/core";
+import { PanelBoard, SmallScreenBoard, type SmallScreenDevices } from "@replicas/boards";
+import { BacklightHelper, Cst816, DcsPanel, Gt911, Ina226, LineSource, PowerLatch, RgbFrame } from "@replicas/devices";
 import {
   EngineAbi,
   GuestModule,
@@ -43,13 +43,14 @@ class UserImageSources implements ImageSources {
   }
 }
 
-/** Opens a small-screen or small-screen-touch run; each mapped name is answered by a local listener that records the hello and refuses the handshake. */
+/** Opens a small-screen, small-screen-touch or panel-7 run; each mapped name is answered by a local listener that records the hello and refuses the handshake. */
 class SmallScreenSessions implements BoardSessions {
   constructor(private readonly root: string) {}
 
-  private composer(board: BoardId): (options: SmallScreenOptions) => SmallScreenRun {
+  private composer(board: BoardId): (options: SmallScreenOptions) => { readonly run: BoardRun } {
     if (board === "small-screen") return (options) => Composition.smallScreen(options);
     if (board === "small-screen-touch") return (options) => Composition.smallScreenTouch(options);
+    if (board === "panel-7") return (options) => Composition.panel(options);
     throw new BoardNotAvailable(board);
   }
 
@@ -99,6 +100,11 @@ export interface SmallScreenRun {
   readonly run: BoardRun;
 }
 
+export interface PanelRun {
+  readonly board: PanelBoard;
+  readonly run: BoardRun;
+}
+
 /** The composition root: the one place the concrete classes are chosen and joined. */
 export class Composition {
   private constructor() {}
@@ -145,17 +151,36 @@ export class Composition {
     return Composition.run({ options, board: SmallScreenBoard.withTouch({ facts, devices: Composition.smallScreenDevices(facts), touch }) });
   }
 
+  static panel(options: SmallScreenOptions): PanelRun {
+    const facts = new FileBoardFacts(options.factsPath).facts("panel-7");
+    const number = (name: string): number => FactLookup.number({ facts, name });
+    const columns = number("display-visible-columns");
+    const rows = number("display-visible-rows");
+    const board = new PanelBoard({
+      facts,
+      devices: {
+        display: new RgbFrame({ columns, rows }),
+        backlight: new BacklightHelper({ address: number("backlight-helper-address"), onCommand: number("backlight-helper-on-command") }),
+        touch: new Gt911({ address: number("touch-address"), columns, rows }),
+      },
+    });
+    return { board, run: Composition.boardRun({ options, board }) };
+  }
+
   private static run(args: { options: SmallScreenOptions; board: SmallScreenBoard }): SmallScreenRun {
+    return { board: args.board, run: Composition.boardRun(args) };
+  }
+
+  private static boardRun(args: { options: SmallScreenOptions; board: BoardReplica & { declaration(): BoardDeclaration } }): BoardRun {
     const { options, board } = args;
     const engine = Composition.engine({ wasm: options.wasm, romDirectory: options.romDirectory, replica: board, console: "uart0", log: options.log });
-    const run = new BoardRun({
+    return new BoardRun({
       engine,
       board,
       declaration: board.declaration(),
       relay: new NetworkRelay(engine, options.network),
       startUnixMilliseconds: options.startUnixMilliseconds,
     });
-    return { board, run };
   }
 
   private static smallScreenDevices(facts: ReturnType<BoardFactsSource["facts"]>): SmallScreenDevices {
