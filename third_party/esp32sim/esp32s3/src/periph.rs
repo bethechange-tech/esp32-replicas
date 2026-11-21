@@ -144,14 +144,16 @@ impl Pcnt {
 pub struct LcdCam { pub ram: RegRam, cam_ctrl: u32, pub cam_ctrl1: u32, pub int_raw: u32, int_ena: u32, running: bool,
                     pub frame_cycles: u64, pub acc: u64, pub frames: u64, pub dropped: u64,
                     // LCD side (RGB / DPI mode): the panel is refreshed from a GDMA out-channel on trigger 5
-                    pub lcd_clock: u32, pub lcd_user: u32, pub lcd_ctrl: u32, pub lcd_ctrl1: u32, pub lcd_acc: u64, pub lcd_frames: u64, pub lcd_line: Vec<u8>, pub lcd_fifo: std::collections::VecDeque<u8>, pub lcd_log: bool,
+                    pub lcd_clock: u32, pub lcd_user: u32, pub lcd_ctrl: u32, pub lcd_ctrl1: u32, pub lcd_acc: u64, pub lcd_frames: u64, pub lcd_line: Vec<u8>, pub lcd_fifo: std::collections::VecDeque<u8>, pub lcd_blank: u64, pub lcd_log: bool,
                     cam_frame: Option<std::sync::Arc<Vec<u8>>>, cam_active: bool, cam_clock_active: bool,
                     clock_enabled: bool, pub frame_dropped: bool, pub frame_start: u64 }
 impl Default for LcdCam { fn default() -> Self { Self::new() } }
 
 impl LcdCam {
+    /// The LCD async FIFO's depth in pixels: ESP-IDF 5.5.6 hal/esp32s3/include/hal/lcd_ll.h:34, LCD_LL_FIFO_DEPTH.
+    pub const FIFO_DEPTH_PX: usize = 16;
     pub fn new() -> Self { LcdCam { ram: RegRam::new(), cam_ctrl: 0, cam_ctrl1: 0, int_raw: 0, int_ena: 0, running: false, cam_active: false, cam_clock_active: false, cam_frame: None, clock_enabled: false, frame_dropped: false, frame_start: 0, frame_cycles: CPU_HZ / 10, acc: 0, frames: 0, dropped: 0,
-                                    lcd_clock: 0, lcd_user: 0, lcd_ctrl: 0, lcd_ctrl1: 0, lcd_acc: 0, lcd_frames: 0, lcd_line: Vec::new(), lcd_fifo: std::collections::VecDeque::new(), lcd_log: false } }
+                                    lcd_clock: 0, lcd_user: 0, lcd_ctrl: 0, lcd_ctrl1: 0, lcd_acc: 0, lcd_frames: 0, lcd_line: Vec::new(), lcd_fifo: std::collections::VecDeque::new(), lcd_blank: 0, lcd_log: false } }
     pub fn irq(&self) -> bool { self.int_raw & self.int_ena != 0 }
     /// LCD RGB mode running: LCD_START (USER bit 27) with LCD_RGB_MODE_EN (CTRL bit 31).
     pub fn lcd_running(&self) -> bool { self.lcd_user & (1 << 27) != 0 && self.lcd_ctrl & (1 << 31) != 0 }
@@ -170,6 +172,27 @@ impl LcdCam {
         let frame_px = (ht as u64) * (vt as u64);
         (ha, va, bpp, frame_px * CPU_HZ / pclk)
     }
+    /// Bytes per pixel at the configured width (LCD_USER bit 23 selects 16-bit pixels).
+    pub fn lcd_bytes_per_pixel(&self) -> usize { if self.lcd_user & (1 << 23) != 0 { 2 } else { 1 } }
+    /// What the RGB driver's restart link skips and the FIFO therefore keeps: LCD_FIFO_PRESERVE_SIZE_PX, depth + 1
+    /// pixels (ESP-IDF 5.5.6 esp_lcd/rgb/esp_lcd_panel_rgb.c:1046), times bytes per pixel (:1053).
+    pub fn lcd_fifo_preserve_bytes(&self) -> usize { (Self::FIFO_DEPTH_PX + 1) * self.lcd_bytes_per_pixel() }
+    /// Lets pending vertical blanking absorb `cycles`; returns what is left for pixel output.
+    pub fn spend_blanking(&mut self, cycles: u64) -> u64 {
+        let spent = cycles.min(self.lcd_blank);
+        self.lcd_blank -= spent;
+        cycles - spent
+    }
+    /// CPU cycles in which a frame's pixels are clocked out: the frame less its vertical blanking, at least 1.
+    pub fn lcd_active_cycles(&self) -> u64 { self.lcd_geometry().3.saturating_sub(self.lcd_blanking_cycles()).max(1) }
+    /// CPU cycles of vertical blanking per frame: the (VT - VA) lines in which no pixel is clocked out.
+    /// ESP32-S3 TRM, LCD_CAM chapter, RGB LCD mode: a frame is VT lines of which VA are active and pixel data is
+    /// consumed only in the active lines; the rest (VSYNC, back and front porch) is where a driver restarts its DMA.
+    pub fn lcd_blanking_cycles(&self) -> u64 {
+        let va = ((self.lcd_ctrl >> 11) & 0x3ff) as u64 + 1; let vt = ((self.lcd_ctrl >> 21) & 0x3ff) as u64 + 1;
+        if vt <= va { return 0; }
+        self.lcd_geometry().3 * (vt - va) / vt
+    }
     pub fn read(&self, off: u32) -> u32 {
         match off { 0x00 => self.lcd_clock, 0x04 => self.cam_ctrl, 0x08 => self.cam_ctrl1, 0x14 => self.lcd_user & !((1 << 20) | (1 << 28)), 0x1c => self.lcd_ctrl, 0x20 => self.lcd_ctrl1,
                     0x64 => self.int_ena, 0x68 => self.int_raw, 0x6c => self.int_raw & self.int_ena, _ => self.ram.read(off) }
@@ -178,10 +201,10 @@ impl LcdCam {
         match off {
             0x00 => self.lcd_clock = v,
             0x14 => { let was = self.lcd_running(); self.lcd_user = v;
-                      if v & (1 << 28) != 0 { self.lcd_line.clear(); self.lcd_fifo.clear(); self.lcd_acc = 0; }                       // LCD_RESET
-                      if !was && self.lcd_running() { self.lcd_line.clear(); self.lcd_acc = 0; }
+                      if v & (1 << 28) != 0 { self.lcd_line.clear(); self.lcd_fifo.clear(); self.lcd_acc = 0; self.lcd_blank = 0; }                       // LCD_RESET
+                      if !was && self.lcd_running() { self.lcd_line.clear(); self.lcd_acc = 0; self.lcd_blank = 0; }
                       if self.lcd_log { eprintln!("[lcd] USER <- {:#010x} (start {} reset {} update {})", v, v >> 27 & 1, v >> 28 & 1, v >> 20 & 1); } }
-            0x18 => { if v & (1 << 27) != 0 { self.lcd_fifo.clear(); if self.lcd_log { eprintln!("[lcd] AFIFO reset"); } } self.ram.write(off, v); }   // LCD_MISC.AFIFO_RESET
+            0x18 => { if v & (1 << 27) != 0 { self.lcd_fifo.truncate(self.lcd_fifo_preserve_bytes()); if self.lcd_log { eprintln!("[lcd] AFIFO reset"); } } self.ram.write(off, v); }   // LCD_MISC.AFIFO_RESET
             0x1c => self.lcd_ctrl = v, 0x20 => self.lcd_ctrl1 = v,
             0x04 => { self.cam_ctrl = v & !(1 << 4); self.refresh_cam_active(); }                                                                          // CAM_UPDATE (self-clearing)
             0x08 => { self.cam_ctrl1 = v & !(3 << 30); self.running = v & (1 << 29) != 0; if v & (1 << 30) != 0 { self.running = false; self.cam_ctrl1 &= !(1 << 29); } self.refresh_cam_active(); }   // CAM_START / CAM_RESET

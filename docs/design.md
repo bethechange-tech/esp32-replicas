@@ -164,9 +164,9 @@ esp32-replicas/                          (repository name: Q11)
 └── tools/vendor-esp32sim.sh, build-engine.sh, build-samples.sh
 ```
 
-### 3.2 The seam in the vendored engine (Rust, generic, one commit)
+### 3.2 The seam in the vendored engine (Rust, generic: the seam commit plus one listed SoC fix)
 
-Each piece sits beside the old path, and upstream's boards behave exactly as before. AC0.3 tests that.
+Each seam piece sits beside the old path, and upstream's boards behave as before apart from the SoC fix of item 4, which changes LCD_CAM RGB timing (the frame rate now follows the timing registers). AC0.3 tests the seam.
 
 1. **A `host` board.** `esp32sim_new` with board name `host` builds `HostBoard`, an `impl BoardModel` that forwards every board event to **synchronous wasm imports**, in order:
    - `host_board_gpio(edges)` and `host_board_spi(transaction)`, which returns MISO bytes;
@@ -176,7 +176,8 @@ Each piece sits beside the old path, and upstream's boards behave exactly as bef
    Order matters, because a DCS panel needs the D/C level at the moment of each SPI byte, so the calls are synchronous.
 2. **Declaring a host board.** `esp32sim_host_board(e, spec_json)` declares which I2C addresses answer on which bus, whether SPI pins and UART pins are routed to the host, and whether LCD frames go to the host. `esp32sim_board_uart_input(e, rx)` queues RX bytes for a pin and baud, as `BoardModel::uart_rx` does natively.
 3. **Byte-exact console input.** Added **only if S0 finds that `key` is not byte-exact**: one binary page-message type, "console bytes", for USB-Serial/JTAG and UART0.
-4. **Nothing else.** The module's existing exports already cover the rest:
+4. **One SoC fix, listed apart from the seam.** `esp32s3/src/periph.rs`, `esp32s3/src/bus/dma.rs` and `esp32s3/src/bus/dma_tests.rs` carry a generic LCD_CAM RGB-output fix with no board knowledge: pixels are clocked out over the active lines at the rate the timing registers give, a frame ends at the end of the active area (not by a running byte count), vertical blanking follows it (where a driver restarts its DMA), and LCD_MISC AFIFO_RESET keeps `LCD_FIFO_PRESERVE_SIZE_PX` pixels (the FIFO depth of 16, plus one) instead of clearing the FIFO. **Observed:** without it a bounce-buffer driver's frames start at a different pixel each time. **Confirmed in the driver source** (ESP-IDF 5.5.6 `esp_lcd_panel_rgb.c`): in the VSYNC_END handler (:1152-1157) it calls `lcd_ll_fifo_reset` (:1193) and restarts the DMA on a restart node (:1088) that starts that many pixels in (:1197). **Inferred for silicon, not tested on hardware:** that the preloaded pixels survive an AFIFO reset. Where the frame rate changes, it is the stretched one (blanking added after a frame spread over the whole period) that was wrong; `lcd_frame_rate_is_the_one_the_timing_registers_give` pins it.
+5. **Nothing else.** The module's existing exports already cover the rest:
    - whole-image load, Wi-Fi, BLE nearby, the BLE virtual controller with an ELF;
    - action scripts (ADC), the NAT and DNS relay, and network frames (`netmon`).
 

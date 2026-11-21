@@ -633,23 +633,28 @@ impl SocBus {
 
     /// LCD RGB output: consume the GDMA out-channel bound to LCD (trigger 5) at the panel's pixel rate,
     /// assemble frames, publish each completed frame to the board and raise LCD_VSYNC.
-    /// LCD RGB output. The LCD engine's async FIFO (16 words) is kept full ahead of the pixel clock,
-    /// so a DMA link restart mid-frame (the RGB driver skips LCD_FIFO_PRESERVE_SIZE_PX pixels then)
-    /// behaves as on silicon. Frames are published to the board and raise LCD_VSYNC.
+    /// The LCD engine's async FIFO is kept full ahead of the pixel clock, so a DMA link restart (the RGB driver
+    /// skips LCD_FIFO_PRESERVE_SIZE_PX pixels then) behaves as on silicon.
     pub(super) fn dma_lcd_step(&mut self, cycles: u64) {
         if !self.periph.lcd_cam.lcd_running() { return; }
-        let (ha, va, bpp, frame_cycles) = self.periph.lcd_cam.lcd_geometry();
+        let (ha, va, bpp, _) = self.periph.lcd_cam.lcd_geometry();
         let frame_bytes = (ha * va * bpp) as usize;
         if frame_bytes == 0 { return; }
-        const FIFO_BYTES: usize = 17 * 2;
+        // Pixels go out in chunks, except the one that ends the frame, which is as small as it needs to be.
+        const MIN_CHUNK_BYTES: usize = 512;
+        let fifo_bytes = self.periph.lcd_cam.lcd_fifo_preserve_bytes();
+        let cycles = self.periph.lcd_cam.spend_blanking(cycles);
+        if cycles == 0 { return; }
         self.periph.lcd_cam.lcd_acc += cycles;
-        let due = (self.periph.lcd_cam.lcd_acc as u128 * frame_bytes as u128 / frame_cycles as u128) as usize;
-        if due < 512 { return; }
+        let active_cycles = self.periph.lcd_cam.lcd_active_cycles();
+        let due = (self.periph.lcd_cam.lcd_acc as u128 * frame_bytes as u128 / active_cycles as u128) as usize;
+        let room = frame_bytes.saturating_sub(self.periph.lcd_cam.lcd_line.len());
+        if due < MIN_CHUNK_BYTES && due < room { return; }
         self.periph.lcd_cam.lcd_acc = 0;
         let log = self.periph.lcd_cam.lcd_log;
         // 1) top the FIFO up from DMA so that it holds `due` + lookahead bytes
         if let Some(ch) = self.periph.gdma.out_channel_for(5) {
-            let mut want = (due + FIFO_BYTES).saturating_sub(self.periph.lcd_cam.lcd_fifo.len());
+            let mut want = (due + fifo_bytes).saturating_sub(self.periph.lcd_cam.lcd_fifo.len());
             let mut walk = DescriptorWalk::new(GDMA_DESCRIPTOR_STEP_BUDGET);
             while want > 0 {
                 let c = self.periph.gdma.out[ch];
@@ -677,17 +682,20 @@ impl SocBus {
                 want -= take;
             }
         }
-        // 2) the panel consumes `due` bytes from the FIFO
-        let n = due.min(self.periph.lcd_cam.lcd_fifo.len());
+        // 2) the panel consumes `due` bytes from the FIFO, never past the end of the active area: the frame
+        // ends there, and what follows belongs to the next one, which starts after the blanking.
+        let n = due.min(self.periph.lcd_cam.lcd_fifo.len()).min(room);
         for _ in 0..n { let b = self.periph.lcd_cam.lcd_fifo.pop_front().unwrap(); self.periph.lcd_cam.lcd_line.push(b); }
-        while self.periph.lcd_cam.lcd_line.len() >= frame_bytes {
-            let frame = std::mem::take(&mut self.periph.lcd_cam.lcd_line);
-            self.board.lcd_frame(ha, va, &frame[..frame_bytes]);
-            if frame.len() > frame_bytes { self.periph.lcd_cam.lcd_line.extend_from_slice(&frame[frame_bytes..]); }
-            self.periph.lcd_cam.lcd_frames += 1;
-            self.periph.lcd_cam.int_raw |= 1 << 0;                                    // LCD_VSYNC_INT
-            self.irq_dirty = true;
-        }
+        if self.periph.lcd_cam.lcd_line.len() < frame_bytes { return; }
+        let frame = std::mem::take(&mut self.periph.lcd_cam.lcd_line);
+        self.board.lcd_frame(ha, va, &frame[..frame_bytes]);
+        self.periph.lcd_cam.lcd_frames += 1;
+        let unused_bytes = if n == room { due - n } else { 0 };
+        let unused_cycles = (unused_bytes as u128 * active_cycles as u128 / frame_bytes as u128) as u64;
+        self.periph.lcd_cam.lcd_blank = self.periph.lcd_cam.lcd_blanking_cycles();
+        self.periph.lcd_cam.lcd_acc = self.periph.lcd_cam.spend_blanking(unused_cycles);
+        self.periph.lcd_cam.int_raw |= 1 << 0;                                    // LCD_VSYNC_INT
+        self.irq_dirty = true;
     }
 
     fn scatter_dma_in(&mut self, ch: usize, data: &[u8], eof_bytes: Option<u32>, finish: bool) -> Result<(), ()> {

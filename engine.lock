@@ -635,6 +635,9 @@
   },
   "seam": {
     "modified": {
+      "esp32s3/src/bus/dma.rs": "5148d1ea1485790ce476226a7d0e3b7ea44b21a7f1c997c63fea37f89c30d5fd",
+      "esp32s3/src/bus/dma_tests.rs": "dae280916b300bd82390c6c6194f78445e21051d5e10bb6148b64daaf12a45d5",
+      "esp32s3/src/periph.rs": "e5542be370c91b242f5f7db3a549313a3bf2a31ebfe0598a6033309d3c3518a8",
       "wasm/src/lib.rs": "5560a60e0aa05916a81235c8d0fedce4f239d568201a1b61a2df3700e7a89d0a"
     },
     "added": {

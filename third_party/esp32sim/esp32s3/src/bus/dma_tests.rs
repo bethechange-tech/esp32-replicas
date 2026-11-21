@@ -603,3 +603,144 @@ fn crypto_descriptor_writeback_preserves_mmio_side_effects() {
     assert!(!bus.periph.gdma.out[0].running);
     assert_eq!(bus.periph.gdma.out[0].desc, 0);
 }
+
+/// A frame of the LCD_CAM RGB interface starts at its first pixel, whatever the driver does between frames.
+/// The pattern is a bounce-buffer driver's: a ring of descriptors the LCD reads continuously, and at the end of each
+/// frame an interrupt service that resets the LCD FIFO and restarts the DMA on a node that skips the pixels the
+/// FIFO already holds. A frame ends where the active area ends (ESP32-S3 TRM, LCD_CAM chapter, RGB LCD mode), not
+/// where a running byte count happens to land.
+#[test]
+fn lcd_frames_start_at_pixel_zero_when_the_driver_restarts_the_dma_each_frame() {
+    use std::sync::{Arc, Mutex};
+    const WIDTH: u32 = 64;
+    const HEIGHT: u32 = 16;
+    const FRAME_BYTES: usize = (WIDTH * HEIGHT * 2) as usize;
+    const CHUNK: usize = FRAME_BYTES / 4;
+    const RING: u32 = DRAM_LOW + 0x1000;
+    const BUFFERS: u32 = DRAM_LOW + 0x2000;
+    const RESTART: u32 = DRAM_LOW + 0x1100;
+    const STEP_CYCLES: u64 = 2000;
+    const FRAMES: usize = 8;
+    const STEP_LIMIT: usize = 400;
+    const LCD_MISC: u32 = 0x18;
+    const AFIFO_RESET: u32 = 1 << 27;
+    const LCD_VSYNC_INT: u32 = 1;
+
+    struct Recorder(Arc<Mutex<Vec<Vec<u8>>>>);
+    impl crate::board::BoardModel for Recorder {
+        fn name(&self) -> &'static str { "lcd-recorder" }
+        fn lcd_frame(&mut self, _w: u32, _h: u32, rgb565: &[u8]) { self.0.lock().unwrap().push(rgb565.to_vec()); }
+    }
+
+    let picture: Vec<u8> = (0..FRAME_BYTES).map(|i| ((i * 31 + 7) % 251) as u8).collect();
+    for isr_latency_steps in 0..3 {
+        let mut bus = SocBus::new(1024, 1024, [0; 6]);
+        let frames = Arc::new(Mutex::new(Vec::new()));
+        bus.board = Box::new(Recorder(frames.clone()));
+        bus.load_bytes(BUFFERS, &picture).unwrap();
+        let descriptor = |address: u32, buffer: u32, length: usize, next: u32| {
+            [(1u32 << 31) | ((length as u32) << 12) | length as u32, buffer, next]
+                .iter().enumerate().map(|(word, value)| (address + 4 * word as u32, *value)).collect::<Vec<_>>()
+        };
+        let skipped = (crate::periph::LcdCam::FIFO_DEPTH_PX + 1) * 2;
+        let mut words = Vec::new();
+        for chunk in 0..4u32 {
+            let next = if chunk == 3 { RING } else { RING + 12 * (chunk + 1) };
+            words.extend(descriptor(RING + 12 * chunk, BUFFERS + chunk * CHUNK as u32, CHUNK, next));
+        }
+        words.extend(descriptor(RESTART, BUFFERS + skipped as u32, CHUNK - skipped, RING + 12));
+        for (address, value) in words { bus.write32(address, value).unwrap(); }
+        let channel = &mut bus.periph.gdma.out[0];
+        channel.running = true; channel.peri_sel = 5; channel.desc = RING;
+        let lcd = &mut bus.periph.lcd_cam;
+        lcd.lcd_user = (1 << 27) | (1 << 23);
+        lcd.lcd_ctrl = (1 << 31) | ((HEIGHT - 1) << 11) | (79 << 21);
+        lcd.lcd_ctrl1 = ((WIDTH - 1) << 8) | (63 << 20);
+
+        let mut restart_in: Option<usize> = None;
+        for _ in 0..STEP_LIMIT {
+            if frames.lock().unwrap().len() >= FRAMES { break; }
+            bus.dma_lcd_step(STEP_CYCLES);
+            if bus.periph.lcd_cam.int_raw & LCD_VSYNC_INT != 0 {
+                bus.periph.lcd_cam.int_raw &= !LCD_VSYNC_INT;
+                restart_in = Some(isr_latency_steps);
+            }
+            match restart_in {
+                Some(0) => {
+                    bus.periph.lcd_cam.write(LCD_MISC, AFIFO_RESET);
+                    let channel = &mut bus.periph.gdma.out[0];
+                    channel.desc = RESTART; channel.buf_pos = 0; channel.running = true;
+                    restart_in = None;
+                }
+                Some(left) => restart_in = Some(left - 1),
+                None => {}
+            }
+        }
+        let frames = frames.lock().unwrap();
+        assert_eq!(frames.len(), FRAMES, "latency {isr_latency_steps}: frames published");
+        for (index, frame) in frames.iter().enumerate() {
+            assert_eq!(frame, &picture, "latency {isr_latency_steps}: frame {index} starts at its first pixel");
+        }
+    }
+}
+
+struct FrameCounter(std::sync::Arc<std::sync::Mutex<Vec<usize>>>);
+impl crate::board::BoardModel for FrameCounter {
+    fn name(&self) -> &'static str { "lcd-counter" }
+    fn lcd_frame(&mut self, _w: u32, _h: u32, rgb565: &[u8]) { self.0.lock().unwrap().push(rgb565.len()); }
+}
+
+/// A single looping descriptor over one framebuffer; `timing` is [active width, active height, total width,
+/// total height] at 16 bits per pixel.
+fn lcd_bus_over_one_framebuffer(timing: [u32; 4]) -> (SocBus, std::sync::Arc<std::sync::Mutex<Vec<usize>>>) {
+    let [width, height, total_width, total_height] = timing;
+    let frame_bytes = width * height * 2;
+    let ring = DRAM_LOW + 0x1000;
+    let mut bus = SocBus::new(1024, 1024, [0; 6]);
+    let frames = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    bus.board = Box::new(FrameCounter(frames.clone()));
+    const PIECE_BYTES: u32 = 512;
+    let pieces = frame_bytes / PIECE_BYTES;
+    for piece in 0..pieces {
+        let at = ring + 12 * piece;
+        let next = if piece + 1 == pieces { ring } else { at + 12 };
+        bus.write32(at, (1 << 31) | (PIECE_BYTES << 12) | PIECE_BYTES).unwrap();
+        bus.write32(at + 4, DRAM_LOW + 0x2000 + piece * PIECE_BYTES).unwrap();
+        bus.write32(at + 8, next).unwrap();
+    }
+    let channel = &mut bus.periph.gdma.out[0];
+    channel.running = true; channel.peri_sel = 5; channel.desc = ring;
+    let lcd = &mut bus.periph.lcd_cam;
+    lcd.lcd_user = (1 << 27) | (1 << 23);
+    lcd.lcd_ctrl = (1 << 31) | ((height - 1) << 11) | ((total_height - 1) << 21);
+    lcd.lcd_ctrl1 = ((width - 1) << 8) | ((total_width - 1) << 20);
+    (bus, frames)
+}
+
+/// The panel refreshes at the frame rate its timing registers give (ESP32-S3 TRM, LCD_CAM chapter, RGB LCD mode):
+/// pixels are clocked out over the active lines and the blanking comes on top of that, not after a stretched frame.
+#[test]
+fn lcd_frame_rate_is_the_one_the_timing_registers_give() {
+    const PERIODS: u64 = 20;
+    for timing in [[64, 16, 64, 80], [64, 60, 72, 64]] {
+        for step_cycles in [100u64, 1000, 2000] {
+            let (mut bus, frames) = lcd_bus_over_one_framebuffer(timing);
+            let frame_cycles = bus.periph.lcd_cam.lcd_geometry().3;
+            for _ in 0..(frame_cycles * PERIODS).div_ceil(step_cycles) { bus.dma_lcd_step(step_cycles); }
+            let published = frames.lock().unwrap().len() as u64;
+            assert_eq!(published, PERIODS, "{timing:?} at {step_cycles}-cycle steps: frames in {PERIODS} frame periods");
+        }
+    }
+}
+
+/// Shrinking the active area while a frame is half collected finishes that frame at the new size, without a panic.
+#[test]
+fn lcd_active_area_shrinking_mid_frame_publishes_a_whole_smaller_frame() {
+    let (mut bus, frames) = lcd_bus_over_one_framebuffer([64, 16, 64, 80]);
+    bus.periph.lcd_cam.lcd_line = vec![0; 600];
+    bus.periph.lcd_cam.lcd_ctrl = (1 << 31) | (1 << 11) | (79 << 21);
+    for _ in 0..10 { bus.dma_lcd_step(500); }
+    let frames = frames.lock().unwrap();
+    assert!(!frames.is_empty());
+    assert_eq!(frames[0], 64 * 2 * 2);
+}

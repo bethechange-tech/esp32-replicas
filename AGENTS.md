@@ -67,8 +67,12 @@ board. A board fact or board behaviour in the Rust is a defect.
 Guard: `test/guards/vendored-tree-matches-the-lock.test.ts` reads `engine.lock` and fails on a
 vendored file that differs from upstream's SHA-256 unless the lock lists it under `seam` with its
 sealed content, on a file the lock does not name, and on a file missing. The seam is
-`wasm/src/host_board.rs` (added) and `wasm/src/lib.rs` (modified). A board fact or board behaviour
-in the Rust is still for review.
+`wasm/src/host_board.rs` (added) and `wasm/src/lib.rs` (modified), plus one generic SoC fix kept apart
+from them: `esp32s3/src/periph.rs` (blanking, FIFO depth, AFIFO_RESET keeps the preserved pixels),
+`esp32s3/src/bus/dma.rs` (LCD_CAM pixels at the timing registers' rate, frames cut at the end of the active
+area) and `esp32s3/src/bus/dma_tests.rs` (its tests). The driver's restart sequence is confirmed in ESP-IDF 5.5.6
+source (`esp_lcd_panel_rgb.c` :1152-1157, :1193, :1197, restart node :1088); that the preloaded pixels survive a
+FIFO reset on silicon is inferred. A board fact or board behaviour in the Rust is still for review.
 
 ### Imports are declared
 
