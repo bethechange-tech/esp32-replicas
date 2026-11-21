@@ -1,0 +1,172 @@
+substitutions:
+  name: replica-small-screen-touch
+
+esphome:
+  name: ${name}
+  project:
+    name: replica.small-screen-touch
+    version: "1.0.0"
+  includes:
+    - common/replica-ca.h
+  on_boot:
+    - priority: 600
+      then:
+        - lambda: id(broker_link)->set_ca_certificate(ReplicaCa::pem());
+        - output.turn_on: system_enable
+    - priority: -100
+      then:
+        - component.update: panel
+
+esp32:
+  variant: esp32s3
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  partitions: partitions.csv
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+packages:
+  logger: !include common/logger.yaml
+  network: !include common/network.yaml
+
+output:
+  - platform: gpio
+    pin: GPIO41
+    id: system_enable
+  - platform: ledc
+    pin: GPIO15
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: backlight
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true
+      ignore_strapping_warning: true
+    id: boot_button
+    on_press:
+      - display.page.show_next: panel
+      - component.update: panel
+  - platform: gpio
+    pin:
+      number: GPIO40
+      inverted: true
+    id: power_button
+    on_click:
+      min_length: 3500ms
+      max_length: 20s
+      then:
+        - output.turn_off: system_enable
+
+spi:
+  clk_pin: GPIO6
+  mosi_pin: GPIO7
+
+display:
+  - platform: mipi_spi
+    id: panel
+    model: ST7789V
+    dimensions:
+      width: 240
+      height: 280
+      offset_height: 20
+    cs_pin: GPIO5
+    dc_pin: GPIO4
+    reset_pin: GPIO8
+    invert_colors: true
+    transform:
+      swap_xy: false
+      mirror_x: true
+      mirror_y: true
+    update_interval: never
+    auto_clear_enabled: false
+    pages:
+      - id: colour_bars
+        lambda: |-
+          const Color bars[8] = {Color(255, 255, 255), Color(255, 255, 0), Color(0, 255, 255), Color(0, 255, 0),
+                                 Color(255, 0, 255), Color(255, 0, 0), Color(0, 0, 255), Color(0, 0, 0)};
+          for (int i = 0; i < 8; i++) it.filled_rectangle(i * 30, 0, 30, 280, bars[i]);
+          it.filled_rectangle(0, 0, 90, 40, Color(255, 128, 0));
+          it.filled_rectangle(0, 0, 40, 90, Color(255, 128, 0));
+          it.filled_rectangle(10, 10, 20, 20, Color(0, 0, 0));
+      - id: ruler
+        lambda: |-
+          it.fill(Color(32, 32, 96));
+          for (int y = 0; y < 280; y += 20) it.filled_rectangle(0, y, (y / 20 + 1) * 15, 10, Color(255, 255, 255));
+          it.filled_rectangle(200, 240, 40, 40, Color(0, 255, 0));
+
+i2c:
+  sda: GPIO11
+  scl: GPIO10
+  frequency: 400kHz
+
+touchscreen:
+  - platform: cst816
+    id: panel_touch
+    address: 0x15
+    display: panel
+    interrupt_pin: GPIO14
+    reset_pin: GPIO13
+    on_touch:
+      - logger.log:
+          level: INFO
+          format: "touch at %d,%d"
+          args: ["touch.x", "touch.y"]
+    on_release:
+      - display.page.show_next: panel
+      - component.update: panel
+
+sensor:
+  - platform: ina226
+    address: 0x40
+    shunt_resistance: 0.010 ohm
+    max_current: 8A
+    update_interval: 1s
+    bus_voltage:
+      name: Battery voltage
+      id: battery_volts
+      on_value:
+        - logger.log:
+            level: INFO
+            format: "INA226 bus voltage %.3f V"
+            args: ["x"]
+  - platform: adc
+    pin: GPIO1
+    id: battery_sense
+    attenuation: 12db
+    update_interval: 1s
+    filters:
+      - multiply: 3.0
+    on_value:
+      - logger.log:
+          level: INFO
+          format: "ADC GPIO1 pack voltage %.3f V"
+          args: ["x"]
+
+uart:
+  id: line_uart
+  rx_pin: GPIO18
+  baud_rate: 115200
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      delimiter: "\n"
+    sequence:
+      - lambda: |-
+          std::string line(bytes.begin(), bytes.end());
+          while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+          ESP_LOGI("line", "received: %s", line.c_str());
+          if (line == "restart") App.safe_reboot();

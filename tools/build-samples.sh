@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the sample firmware in sample-firmware/ with the ESPHome container pinned by digest in
 # sample-firmware/samples.lock, on the platform that lock names (one canonical binary, emulated where the host differs), and writes factory.bin and firmware.elf under build/samples/<id>/.
-#   tools/build-samples.sh [small-screen]
+#   tools/build-samples.sh ["small-screen small-screen-touch"]   (ids separated by spaces; default: both samples)
 # Needs Docker. The binaries are never committed; samples.lock pins their SHA-256.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -9,13 +9,13 @@ SAMPLES="$ROOT/sample-firmware"
 OUT="$ROOT/build/samples"
 WORK="$ROOT/build/esphome-work"
 lock_field() {
-  node -e 'process.stdout.write(String(process.argv[2].split(".").reduce((node, key) => node[key], JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")))))' "$SAMPLES/samples.lock" "$1"
+  node -e 'const field = process.argv[2]; const found = field.split(".").reduce((node, key) => (node === undefined || node === null ? undefined : node[key]), JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))); if (found === undefined) { console.error("samples.lock has no field " + field); process.exit(1); } process.stdout.write(String(found))' "$SAMPLES/samples.lock" "$1"
 }
 IMAGE=$(lock_field esphome.image)
 PLATFORM=$(lock_field esphome.platform)
 CACHE="$ROOT/build/esphome-cache/$(echo "$PLATFORM" | tr / -)"
 FIXED_EPOCH=1780000000
-IDS=${1:-small-screen}
+IDS=${1:-"small-screen small-screen-touch"}
 
 sha256_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi

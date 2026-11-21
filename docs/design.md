@@ -149,7 +149,7 @@ esp32-replicas/                          (repository name: Q11)
 ├── facts/boards.json                    the board facts (pins, addresses, sizes, orientation, attachments), each with a public https source
 ├── sample-firmware/                     public ESPHome YAML, one per board, + build script (ESPHome container pinned by digest)
 │   ├── small-screen.yaml, small-screen-touch.yaml, panel-7.yaml, headless.yaml, common/*.yaml, partitions.csv
-│   └── samples.lock                     per sample: ESPHome version + image digest, and SHA-256 of factory.bin and firmware.elf
+│   └── samples.lock                     the ESPHome version, the image digest and the build platform (linux/amd64), and per sample the SHA-256 of factory.bin and firmware.elf
 ├── packages/
 │   ├── core/src/                        board-facts.ts, run-plan.ts, observation.ts, units.ts, ports/*.ts
 │   ├── devices/src/                     dcs-panel.ts, rgb-frame.ts, cst816.ts, gt911.ts, ina226.ts, backlight-helper.ts, power-latch.ts, status-light.ts, line-source.ts

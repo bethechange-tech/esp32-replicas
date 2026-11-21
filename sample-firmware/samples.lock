@@ -8,6 +8,10 @@
     "small-screen": {
       "factorySha256": "1279db58ebd42460b0056753cbec6b99ec777bebb29a4e9573bff34cfb9e2459",
       "elfSha256": "e01cfa191e7e5a6ea29d31f1f9fc444a19164acf661a98fdddc08dc31cdb9ed7"
+    },
+    "small-screen-touch": {
+      "factorySha256": "e2afcc23b7dc6f34fcdbff0371b6b5b2d50eeebed81d614a41ff30fde9e23a0e",
+      "elfSha256": "320648c1e08a56a3b90960e526e084118fed48c32c86696533f43daec2c83515"
     }
   }
 }

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { FactLookup, type BoardFactsSource, type BoardId, type BoardReplica, type FirmwareSource, type GuestNetwork, type Output, type WifiSpec } from "@replicas/core";
-import { SmallScreenBoard } from "@replicas/boards";
-import { DcsPanel, Ina226, LineSource, PowerLatch } from "@replicas/devices";
+import { SmallScreenBoard, type SmallScreenDevices } from "@replicas/boards";
+import { Cst816, DcsPanel, Ina226, LineSource, PowerLatch } from "@replicas/devices";
 import {
   EngineAbi,
   GuestModule,
@@ -43,16 +43,22 @@ class UserImageSources implements ImageSources {
   }
 }
 
-/** Opens a small-screen run; each mapped name is answered by a local listener that records the hello and refuses the handshake. */
+/** Opens a small-screen or small-screen-touch run; each mapped name is answered by a local listener that records the hello and refuses the handshake. */
 class SmallScreenSessions implements BoardSessions {
   constructor(private readonly root: string) {}
 
+  private composer(board: BoardId): (options: SmallScreenOptions) => SmallScreenRun {
+    if (board === "small-screen") return (options) => Composition.smallScreen(options);
+    if (board === "small-screen-touch") return (options) => Composition.smallScreenTouch(options);
+    throw new BoardNotAvailable(board);
+  }
+
   async open(args: { board: BoardId; mappedNames: readonly string[]; wifi: WifiSpec }): Promise<BoardSession> {
-    if (args.board !== "small-screen") throw new BoardNotAvailable(args.board);
+    const compose = this.composer(args.board);
     const listeners = args.mappedNames.map(() => TlsHelloListener.refusing());
     const endpoints = await Promise.all(listeners.map((listener) => listener.listen()));
     const network: GuestNetwork = args.mappedNames.length === 0 ? new OfflineNetwork() : new NodeSocketNetwork(Object.fromEntries(args.mappedNames.map((name, index) => [name, endpoints[index] as (typeof endpoints)[number]])));
-    const composed = Composition.smallScreen({
+    const composed = compose({
       wasm: readFileSync(path.join(this.root, ENGINE_FILE)),
       romDirectory: path.join(this.root, ROM_DIRECTORY),
       factsPath: path.join(this.root, FACTS_FILE),
@@ -126,7 +132,21 @@ export class Composition {
 
   static smallScreen(options: SmallScreenOptions): SmallScreenRun {
     const facts = new FileBoardFacts(options.factsPath).facts("small-screen");
-    const board = new SmallScreenBoard(facts, Composition.smallScreenDevices(facts));
+    return Composition.run({ options, board: SmallScreenBoard.withoutTouch({ facts, devices: Composition.smallScreenDevices(facts) }) });
+  }
+
+  static smallScreenTouch(options: SmallScreenOptions): SmallScreenRun {
+    const facts = new FileBoardFacts(options.factsPath).facts("small-screen-touch");
+    const touch = new Cst816({
+      address: FactLookup.number({ facts, name: "touch-address" }),
+      interruptGpio: FactLookup.pin({ facts, name: "touch-interrupt" }),
+      resetGpio: FactLookup.pin({ facts, name: "touch-reset" }),
+    });
+    return Composition.run({ options, board: SmallScreenBoard.withTouch({ facts, devices: Composition.smallScreenDevices(facts), touch }) });
+  }
+
+  private static run(args: { options: SmallScreenOptions; board: SmallScreenBoard }): SmallScreenRun {
+    const { options, board } = args;
     const engine = Composition.engine({ wasm: options.wasm, romDirectory: options.romDirectory, replica: board, console: "uart0", log: options.log });
     const run = new BoardRun({
       engine,
@@ -138,7 +158,7 @@ export class Composition {
     return { board, run };
   }
 
-  private static smallScreenDevices(facts: ReturnType<BoardFactsSource["facts"]>): ConstructorParameters<typeof SmallScreenBoard>[1] {
+  private static smallScreenDevices(facts: ReturnType<BoardFactsSource["facts"]>): SmallScreenDevices {
     const number = (name: string): number => FactLookup.number({ facts, name });
     const pin = (name: string): number => FactLookup.pin({ facts, name });
     return {
