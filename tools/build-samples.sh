@@ -13,6 +13,10 @@ IMAGE=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(proc
 FIXED_EPOCH=1780000000
 IDS=${1:-small-screen}
 
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi
+}
+
 mkdir -p "$OUT" "$CACHE"
 for id in $IDS; do
   mkdir -p "$WORK"
@@ -23,6 +27,6 @@ for id in $IDS; do
   mkdir -p "$OUT/$id"
   cp "$(find "$built" -name firmware.factory.bin | head -1)" "$OUT/$id/factory.bin"
   cp "$(find "$built" -name firmware.elf | head -1)" "$OUT/$id/firmware.elf"
-  rm -r -f "$run"
-  echo "$id: $(shasum -a 256 "$OUT/$id/factory.bin" | cut -d' ' -f1) factory.bin"
+  docker run --rm -v "$WORK:/work" --entrypoint rm "$IMAGE" -r -f "/work/$(basename "$run")"
+  echo "$id: $(sha256_of "$OUT/$id/factory.bin") factory.bin"
 done
